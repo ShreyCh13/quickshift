@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
-import { parseFirstSheet } from "@/lib/excel";
+import { parseCsv, parseFirstSheet } from "@/lib/excel";
 import type { VehiclesImportResult } from "@/lib/types";
 
 export async function POST(req: Request) {
@@ -17,8 +17,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing file" }, { status: 400 });
   }
 
-  const buffer = await file.arrayBuffer();
-  const rows = parseFirstSheet(buffer);
+  const filename = file.name.toLowerCase();
+  let rows: Record<string, unknown>[] = [];
+  if (filename.endsWith(".csv")) {
+    const text = await file.text();
+    rows = parseCsv(text);
+  } else {
+    const buffer = await file.arrayBuffer();
+    rows = parseFirstSheet(buffer);
+  }
   const result: VehiclesImportResult = { inserted: 0, updated: 0, skipped: 0, errors: [] };
 
   const supabase = getSupabaseAdmin();

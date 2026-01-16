@@ -25,3 +25,11 @@ export function parseFirstSheet(buffer: ArrayBuffer) {
   const ws = wb.Sheets[sheetName];
   return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
 }
+
+export function parseCsv(text: string) {
+  const wb = XLSX.read(text, { type: "string" });
+  const sheetName = wb.SheetNames[0];
+  if (!sheetName) return [];
+  const ws = wb.Sheets[sheetName];
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" });
+}

@@ -18,6 +18,9 @@
   - Seed: `supabase/seed.sql`
   - Admin UI: `src/features/admin/page.tsx`
   - Inspection form: `src/features/inspections/page.tsx` + `src/features/inspections/components.tsx`
+## Vehicle data file
+- Editable vehicle list CSV: `data/vehicles.csv`
+- Import via Admin → Vehicles → Import Excel (supports `.xlsx` and `.csv`)
 
 ## API routes map
 - `POST /api/auth/login` -> `src/app/api/auth/login/route.ts`

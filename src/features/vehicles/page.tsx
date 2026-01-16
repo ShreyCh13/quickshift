@@ -212,7 +212,7 @@ export default function VehiclesPage() {
               <span className="mb-1 block text-sm font-medium text-slate-700">Import Excel</span>
               <input
                 type="file"
-                accept=".xlsx"
+                accept=".xlsx,.csv"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) handleImport(file);
