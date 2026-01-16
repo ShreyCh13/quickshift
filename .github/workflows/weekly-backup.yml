@@ -1,0 +1,16 @@
+name: weekly-backup
+
+on:
+  schedule:
+    - cron: "0 3 * * 1,4"
+  workflow_dispatch: {}
+
+jobs:
+  call-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger backup endpoint
+        run: |
+          curl -sS -X POST \
+            -H "Authorization: Bearer ${{ secrets.BACKUP_SECRET }}" \
+            "${{ secrets.BACKUP_URL }}"

@@ -1,0 +1,76 @@
+import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/db";
+import { requireRole, requireSession } from "@/lib/auth";
+import { remarkFieldSchema } from "@/lib/validation";
+
+export async function GET(req: Request) {
+  const session = requireSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const url = new URL(req.url);
+  const activeOnly = url.searchParams.get("activeOnly") === "1";
+  const supabase = getSupabaseAdmin();
+  let query = supabase.from("remark_fields").select("*");
+  if (activeOnly) query = query.eq("is_active", true);
+  const { data, error } = await query.order("sort_order", { ascending: true });
+  if (error) return NextResponse.json({ error: "Failed to load remark fields" }, { status: 500 });
+  return NextResponse.json({ remarkFields: data });
+}
+
+export async function POST(req: Request) {
+  const session = requireSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireRole(session, ["admin"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  try {
+    const input = remarkFieldSchema.parse(await req.json());
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase.from("remark_fields").insert(input).select("*").single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ remarkField: data });
+  } catch {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+}
+
+export async function PUT(req: Request) {
+  const session = requireSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireRole(session, ["admin"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  try {
+    const input = remarkFieldSchema.parse(await req.json());
+    if (!input.id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const { id, ...updates } = input;
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("remark_fields")
+      .update(updates)
+      .eq("id", id)
+      .select("*")
+      .single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ remarkField: data });
+  } catch {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  const session = requireSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireRole(session, ["admin"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  try {
+    const { id } = (await req.json()) as { id?: string };
+    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase.from("remark_fields").delete().eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+}
