@@ -33,3 +33,12 @@ export async function createMaintenance(payload: Record<string, unknown>) {
   });
   return res.json();
 }
+
+export async function deleteMaintenance(id: string) {
+  const res = await fetch("/api/events/maintenance", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...getSessionHeader() },
+    body: JSON.stringify({ id }),
+  });
+  return res.json();
+}

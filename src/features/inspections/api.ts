@@ -33,3 +33,12 @@ export async function createInspection(payload: Record<string, unknown>) {
   });
   return res.json();
 }
+
+export async function deleteInspection(id: string) {
+  const res = await fetch("/api/events/inspections", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...getSessionHeader() },
+    body: JSON.stringify({ id }),
+  });
+  return res.json();
+}

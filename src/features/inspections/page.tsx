@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { loadSession } from "@/lib/auth";
 import type { Session, InspectionRow, VehicleRow } from "@/lib/types";
-import { fetchInspections } from "./api";
+import { fetchInspections, deleteInspection } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
 
 export default function InspectionsPage() {
@@ -17,6 +17,9 @@ export default function InspectionsPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const isAdmin = session?.user.role === "admin";
 
   useEffect(() => {
     const s = loadSession();
@@ -25,9 +28,14 @@ export default function InspectionsPage() {
       return;
     }
     setSession(s);
-    loadVehicles();
-    loadInspections();
   }, [router]);
+
+  useEffect(() => {
+    if (session) {
+      loadVehicles();
+      loadInspections();
+    }
+  }, [session]);
 
   async function loadVehicles() {
     const res = await fetchVehicles({ page: 1, pageSize: 200 });
@@ -44,6 +52,12 @@ export default function InspectionsPage() {
     const res = await fetchInspections({ filters, page: 1, pageSize: 100 });
     setInspections(res.inspections || []);
     setLoading(false);
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("Delete this inspection?")) return;
+    const res = await deleteInspection(id);
+    if (!res.error) loadInspections();
   }
 
   if (!session) return null;
@@ -80,12 +94,14 @@ export default function InspectionsPage() {
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="rounded-lg border-2 px-3 py-2 text-sm"
+              placeholder="From"
             />
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="rounded-lg border-2 px-3 py-2 text-sm"
+              placeholder="To"
             />
           </div>
           <button
@@ -102,22 +118,53 @@ export default function InspectionsPage() {
         ) : inspections.length === 0 ? (
           <div className="rounded-xl bg-white p-8 text-center shadow">
             <p className="text-slate-500">No inspections found</p>
+            <p className="mt-2 text-sm text-slate-400">Click &quot;New Inspection&quot; to add one</p>
           </div>
         ) : (
           <div className="space-y-3">
             {inspections.map((item: any) => (
-              <div key={item.id} className="rounded-xl border-2 border-blue-100 bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-bold text-slate-900">
-                      {item.vehicles?.vehicle_code || "Unknown Vehicle"}
+              <div key={item.id} className="rounded-xl border-2 border-blue-100 bg-white shadow-sm">
+                <button
+                  onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                  className="w-full p-4 text-left"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-bold text-slate-900">
+                        {item.vehicles?.vehicle_code || "Unknown Vehicle"}
+                      </div>
+                      <div className="text-sm text-slate-600">
+                        {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km
+                      </div>
+                      {item.driver_name && <div className="text-xs text-slate-500">Driver: {item.driver_name}</div>}
                     </div>
-                    <div className="text-sm text-slate-600">
-                      {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km
-                    </div>
-                    {item.driver_name && <div className="text-xs text-slate-500">Driver: {item.driver_name}</div>}
+                    <span className="text-blue-600">{expandedId === item.id ? "▼" : "▶"}</span>
                   </div>
-                </div>
+                </button>
+
+                {expandedId === item.id && (
+                  <div className="border-t border-blue-100 bg-blue-50 p-4">
+                    <h4 className="mb-2 font-semibold text-slate-900">Inspection Details:</h4>
+                    <div className="space-y-1 text-sm">
+                      {Object.entries(item.remarks_json || {}).map(([key, value]) => (
+                        <div key={key} className="flex justify-between">
+                          <span className="font-medium text-slate-700">{key}:</span>
+                          <span className="text-slate-600">{String(value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {isAdmin && (
+                      <div className="mt-4 flex gap-2">
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>
