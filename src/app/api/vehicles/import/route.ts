@@ -31,7 +31,10 @@ export async function POST(req: Request) {
   const supabase = getSupabaseAdmin();
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
-    const vehicle_code = String(row.vehicle_code || row.VehicleCode || row.code || "").trim();
+    // Support multiple column name formats
+    const vehicle_code = String(
+      row.vehicle_code || row.VehicleCode || row["Vehicle Number"] || row.code || ""
+    ).trim();
     if (!vehicle_code) {
       result.skipped += 1;
       result.errors.push({ row: i + 2, message: "Missing vehicle_code" });
@@ -39,11 +42,13 @@ export async function POST(req: Request) {
     }
     const payload = {
       vehicle_code,
-      make: row.make ? String(row.make) : null,
-      model: row.model ? String(row.model) : null,
-      year: row.year ? Number(row.year) : null,
-      plate_number: row.plate_number ? String(row.plate_number) : null,
-      notes: row.notes ? String(row.notes) : null,
+      make: row.make || row.Make ? String(row.make || row.Make) : null,
+      model: row.model || row.Model || row["Type of Vehicles"] ? 
+        String(row.model || row.Model || row["Type of Vehicles"]) : null,
+      year: row.year || row.Year ? Number(row.year || row.Year) : null,
+      plate_number: row.plate_number || row.plate_number || row["Plate Number"] ? 
+        String(row.plate_number || row.plate_number || row["Plate Number"]) : null,
+      notes: row.notes || row.Notes ? String(row.notes || row.Notes) : null,
       is_active: true,
     };
 
