@@ -14,6 +14,7 @@ export default function MaintenancePage() {
   const [maintenance, setMaintenance] = useState<MaintenanceRow[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [vehicleFilter, setVehicleFilter] = useState("");
+  const [vehicleSearch, setVehicleSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -49,6 +50,7 @@ export default function MaintenancePage() {
     setLoading(true);
     const filters: any = {};
     if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (vehicleSearch) filters.vehicle_query = vehicleSearch;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
     if (supplierFilter) filters.supplier = supplierFilter;
@@ -92,6 +94,13 @@ export default function MaintenancePage() {
               </option>
             ))}
           </select>
+          <input
+            type="text"
+            value={vehicleSearch}
+            onChange={(e) => setVehicleSearch(e.target.value)}
+            placeholder="Search by vehicle code or plate..."
+            className="w-full rounded-lg border-2 px-3 py-2 text-sm"
+          />
           <input
             type="text"
             value={supplierFilter}

@@ -65,7 +65,19 @@ export async function GET(req: Request) {
     const parsed = filters ? inspectionsFilterSchema.safeParse(filters) : null;
     const f = parsed?.success ? parsed.data : {};
     let query = supabase.from("inspections").select("*");
-    if (f.vehicle_id) query = query.eq("vehicle_id", f.vehicle_id);
+    if (f.vehicle_id) {
+      query = query.eq("vehicle_id", f.vehicle_id);
+    } else if (f.vehicle_query) {
+      const term = `%${f.vehicle_query}%`;
+      const { data: vehicles, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+      if (vehicleError) return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
+      const ids = (vehicles || []).map((v) => v.id);
+      if (ids.length === 0) return NextResponse.json({ inspections: [], total: 0 });
+      query = query.in("vehicle_id", ids);
+    }
     if (f.date_from) query = query.gte("created_at", f.date_from);
     if (f.date_to) query = query.lte("created_at", f.date_to);
     if (f.odometer_min !== undefined) query = query.gte("odometer_km", f.odometer_min);
@@ -87,7 +99,19 @@ export async function GET(req: Request) {
     const parsed = filters ? maintenanceFilterSchema.safeParse(filters) : null;
     const f = parsed?.success ? parsed.data : {};
     let query = supabase.from("maintenance").select("*");
-    if (f.vehicle_id) query = query.eq("vehicle_id", f.vehicle_id);
+    if (f.vehicle_id) {
+      query = query.eq("vehicle_id", f.vehicle_id);
+    } else if (f.vehicle_query) {
+      const term = `%${f.vehicle_query}%`;
+      const { data: vehicles, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+      if (vehicleError) return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
+      const ids = (vehicles || []).map((v) => v.id);
+      if (ids.length === 0) return NextResponse.json({ maintenance: [], total: 0 });
+      query = query.in("vehicle_id", ids);
+    }
     if (f.date_from) query = query.gte("created_at", f.date_from);
     if (f.date_to) query = query.lte("created_at", f.date_to);
     if (f.odometer_min !== undefined) query = query.gte("odometer_km", f.odometer_min);

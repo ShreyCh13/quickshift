@@ -33,7 +33,23 @@ export async function GET(req: Request) {
     .from("maintenance")
     .select("*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)", { count: "exact" });
 
-  if (filters.vehicle_id) query = query.eq("vehicle_id", filters.vehicle_id);
+  if (filters.vehicle_id) {
+    query = query.eq("vehicle_id", filters.vehicle_id);
+  } else if (filters.vehicle_query) {
+    const term = `%${filters.vehicle_query}%`;
+    const { data: vehicles, error: vehicleError } = await supabase
+      .from("vehicles")
+      .select("id")
+      .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+    if (vehicleError) {
+      return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
+    }
+    const ids = (vehicles || []).map((v) => v.id);
+    if (ids.length === 0) {
+      return NextResponse.json({ maintenance: [], total: 0 });
+    }
+    query = query.in("vehicle_id", ids);
+  }
   if (filters.date_from) query = query.gte("created_at", filters.date_from);
   if (filters.date_to) query = query.lte("created_at", filters.date_to);
   if (filters.odometer_min !== undefined) query = query.gte("odometer_km", filters.odometer_min);

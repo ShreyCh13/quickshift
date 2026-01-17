@@ -14,6 +14,7 @@ export default function InspectionsPage() {
   const [inspections, setInspections] = useState<InspectionRow[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [vehicleFilter, setVehicleFilter] = useState("");
+  const [vehicleSearch, setVehicleSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,7 @@ export default function InspectionsPage() {
     setLoading(true);
     const filters: any = {};
     if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (vehicleSearch) filters.vehicle_query = vehicleSearch;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
 
@@ -94,6 +96,13 @@ export default function InspectionsPage() {
               </option>
             ))}
           </select>
+          <input
+            type="text"
+            value={vehicleSearch}
+            onChange={(e) => setVehicleSearch(e.target.value)}
+            placeholder="Search by vehicle code or plate..."
+            className="w-full rounded-lg border-2 px-3 py-2 text-sm"
+          />
           <div className="grid grid-cols-2 gap-2">
             <input
               type="datetime-local"
