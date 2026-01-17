@@ -11,10 +11,20 @@ export async function fetchVehicles(params: {
   if (params.page) query.set("page", String(params.page));
   if (params.pageSize) query.set("pageSize", String(params.pageSize));
   if (params.isActive !== undefined) query.set("isActive", String(params.isActive));
-  const res = await fetch(`/api/vehicles?${query.toString()}`, {
-    headers: { ...getSessionHeader() },
-  });
-  return res.json();
+  try {
+    const res = await fetch(`/api/vehicles?${query.toString()}`, {
+      headers: { ...getSessionHeader() },
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      if (data && typeof data === "object") return data;
+      return { error: "Failed to load vehicles", details: `${res.status} ${res.statusText}` };
+    }
+    return data;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Network error";
+    return { error: "Failed to load vehicles", details: message };
+  }
 }
 
 export async function createVehicle(payload: Record<string, unknown>) {

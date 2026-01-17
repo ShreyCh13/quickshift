@@ -5,37 +5,43 @@ import { vehicleSchema } from "@/lib/validation";
 import { PAGE_SIZE_DEFAULT } from "@/lib/constants";
 
 export async function GET(req: Request) {
-  const session = requireSession(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const url = new URL(req.url);
-  const search = url.searchParams.get("search");
-  const isActive = url.searchParams.get("isActive");
-  const page = Number(url.searchParams.get("page") || "1");
-  const pageSize = Math.min(Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT), 200);
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
+  try {
+    const session = requireSession(req);
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const url = new URL(req.url);
+    const search = url.searchParams.get("search");
+    const isActive = url.searchParams.get("isActive");
+    const page = Number(url.searchParams.get("page") || "1");
+    const pageSize = Math.min(Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT), 200);
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
 
-  const supabase = getSupabaseAdmin();
-  let query = supabase
-    .from("vehicles")
-    .select("id, vehicle_code, plate_number, brand, model, year, notes, is_active, created_at, updated_at", {
-      count: "exact",
-    });
-  if (typeof search === "string" && search.trim()) {
-    const term = `%${search.trim()}%`;
-    query = query.or(`vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
-  }
-  if (isActive === "true") query = query.eq("is_active", true);
-  if (isActive === "false") query = query.eq("is_active", false);
+    const supabase = getSupabaseAdmin();
+    let query = supabase
+      .from("vehicles")
+      .select("id, vehicle_code, plate_number, brand, model, year, notes, is_active, created_at, updated_at", {
+        count: "exact",
+      });
+    if (typeof search === "string" && search.trim()) {
+      const term = `%${search.trim()}%`;
+      query = query.or(`vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
+    }
+    if (isActive === "true") query = query.eq("is_active", true);
+    if (isActive === "false") query = query.eq("is_active", false);
 
-  const { data, error, count } = await query
-    .order("vehicle_code", { ascending: true })
-    .range(from, to);
-  if (error) {
-    console.error("Failed to load vehicles:", error);
-    return NextResponse.json({ error: "Failed to load vehicles" }, { status: 500 });
+    const { data, error, count } = await query
+      .order("vehicle_code", { ascending: true })
+      .range(from, to);
+    if (error) {
+      console.error("Failed to load vehicles:", error);
+      return NextResponse.json({ error: "Failed to load vehicles", details: error.message }, { status: 500 });
+    }
+    return NextResponse.json({ vehicles: data, total: count || 0 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unexpected error";
+    console.error("Failed to load vehicles:", err);
+    return NextResponse.json({ error: "Failed to load vehicles", details: message }, { status: 500 });
   }
-  return NextResponse.json({ vehicles: data, total: count || 0 });
 }
 
 export async function POST(req: Request) {

@@ -51,3 +51,18 @@ export async function deleteMaintenance(id: string) {
   });
   return res.json();
 }
+
+export function buildExportUrl(params: {
+  type: "maintenance";
+  format: "xlsx" | "csv";
+  filters?: Record<string, unknown>;
+}) {
+  const query = new URLSearchParams();
+  query.set("type", params.type);
+  query.set("format", params.format);
+  if (params.filters) {
+    const raw = JSON.stringify(params.filters);
+    query.set("filters", toBase64(raw));
+  }
+  return `/api/export?${query.toString()}`;
+}

@@ -14,6 +14,9 @@
   - `S3_SECRET_ACCESS_KEY`
   - `S3_BUCKET`
   - `S3_REGION`
+- Optional local sync from Vercel:
+  - `npm run env:pull` (pulls to `.env.local`)
+  - Or copy `env.example` to `.env.local` and fill values
 - Add GitHub Actions secrets:
   - `BACKUP_URL` (https://your-vercel-domain/api/backup)
   - `BACKUP_SECRET`

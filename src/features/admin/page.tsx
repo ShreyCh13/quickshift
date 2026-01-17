@@ -26,6 +26,9 @@ export default function AdminPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [userEdits, setUserEdits] = useState<
+    Record<string, { display_name: string; role: UserRow["role"]; password: string }>
+  >({});
   const [remarkFields, setRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<SectionKey>("users");
@@ -41,6 +44,28 @@ export default function AdminPage() {
     sort_order: "",
     is_active: true,
   });
+
+  function startUserEdit(user: UserRow) {
+    setUserEdits((prev) => ({
+      ...prev,
+      [user.id]: { display_name: user.display_name, role: user.role, password: "" },
+    }));
+  }
+
+  function cancelUserEdit(id: string) {
+    setUserEdits((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }
+
+  function updateUserEdit(id: string, patch: Partial<{ display_name: string; role: UserRow["role"]; password: string }>) {
+    setUserEdits((prev) => ({
+      ...prev,
+      [id]: { ...prev[id], ...patch },
+    }));
+  }
 
   useEffect(() => {
     const sessionData = loadSession();
@@ -180,40 +205,77 @@ export default function AdminPage() {
         {activeSection === "users" && (
           <AdminSection title="Users">
             <div className="space-y-2">
-              {users.map((user) => (
+              {users.map((user) => {
+                const editing = userEdits[user.id];
+                return (
                 <div key={user.id} className="rounded-md border p-2">
                   <div className="text-sm font-semibold">{user.username}</div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <input
                       className="h-10 rounded-md border px-2 text-sm"
-                      value={user.display_name}
-                      onChange={(e) =>
-                        setUsers((prev) =>
-                          prev.map((u) => (u.id === user.id ? { ...u, display_name: e.target.value } : u)),
-                        )
-                      }
+                      value={editing ? editing.display_name : user.display_name}
+                      disabled={!editing}
+                      onChange={(e) => updateUserEdit(user.id, { display_name: e.target.value })}
                     />
                     <select
                       className="h-10 rounded-md border px-2 text-sm"
-                      value={user.role}
-                      onChange={(e) =>
-                        setUsers((prev) =>
-                          prev.map((u) => (u.id === user.id ? { ...u, role: e.target.value as "admin" | "staff" } : u)),
-                        )
-                      }
+                      value={editing ? editing.role : user.role}
+                      disabled={!editing}
+                      onChange={(e) => updateUserEdit(user.id, { role: e.target.value as "admin" | "staff" })}
                     >
                       <option value="admin">Admin</option>
                       <option value="staff">Staff</option>
                     </select>
+                    {editing && (
+                      <input
+                        type="password"
+                        className="col-span-2 h-10 rounded-md border px-2 text-sm"
+                        placeholder="New password"
+                        value={editing.password}
+                        onChange={(e) => updateUserEdit(user.id, { password: e.target.value })}
+                      />
+                    )}
                   </div>
                   <div className="mt-2 flex gap-2">
-                    <button
-                      type="button"
-                      className="h-10 flex-1 rounded-md bg-slate-900 text-sm font-semibold text-white"
-                      onClick={() => updateUser({ id: user.id, display_name: user.display_name, role: user.role }).then(loadAdminData)}
-                    >
-                      Save
-                    </button>
+                    {editing ? (
+                      <>
+                        <button
+                          type="button"
+                          className="h-10 flex-1 rounded-md bg-slate-900 text-sm font-semibold text-white"
+                          onClick={() => {
+                            const payload: Record<string, unknown> = {
+                              id: user.id,
+                              display_name: editing.display_name,
+                              role: editing.role,
+                            };
+                            if (editing.password.trim()) {
+                              payload.password = editing.password;
+                            }
+                            updateUser(payload).then(() => {
+                              cancelUserEdit(user.id);
+                              loadAdminData();
+                            });
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          className="h-10 flex-1 rounded-md border border-slate-300 text-sm font-semibold text-slate-700"
+                          onClick={() => cancelUserEdit(user.id)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="h-10 flex-1 rounded-md bg-slate-900 text-sm font-semibold text-white"
+                        onClick={() => startUserEdit(user)}
+                      >
+                        Edit
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="h-10 flex-1 rounded-md bg-red-600 text-sm font-semibold text-white"
@@ -223,7 +285,8 @@ export default function AdminPage() {
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-3 space-y-2 rounded-md border p-2">
               <div className="text-sm font-semibold">Add User</div>

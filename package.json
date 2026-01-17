@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "env:pull": "npx vercel env pull .env.local",
+    "env:pull:prod": "npx vercel env pull .env.local --environment=production"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.970.0",

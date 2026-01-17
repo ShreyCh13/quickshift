@@ -20,7 +20,6 @@ export default function VehiclesPage() {
 
   const [newVehicle, setNewVehicle] = useState({
     vehicle_code: "",
-    plate_number: "",
     brand: "",
     model: "",
     year: "",
@@ -42,7 +41,7 @@ export default function VehiclesPage() {
     setLoading(true);
     const data = await fetchVehicles({ search, page: 1, pageSize: 200 });
     if (data.error) {
-      setError(data.error);
+      setError(data.details ? `${data.error}: ${data.details}` : data.error);
       setVehicles([]);
     } else {
       setError(null);
@@ -61,12 +60,19 @@ export default function VehiclesPage() {
       setError("Vehicle code is required");
       return;
     }
+    if (!newVehicle.brand.trim()) {
+      setError("Brand is required");
+      return;
+    }
+    if (!newVehicle.model.trim()) {
+      setError("Model is required");
+      return;
+    }
     setError(null);
     const payload = {
-      vehicle_code: newVehicle.vehicle_code,
-      plate_number: newVehicle.plate_number || null,
-      brand: newVehicle.brand || null,
-      model: newVehicle.model || null,
+      vehicle_code: newVehicle.vehicle_code.trim(),
+      brand: newVehicle.brand.trim(),
+      model: newVehicle.model.trim(),
       year: newVehicle.year ? Number(newVehicle.year) : null,
       notes: newVehicle.notes || null,
     };
@@ -75,7 +81,7 @@ export default function VehiclesPage() {
       setError(res.error);
       return;
     }
-    setNewVehicle({ vehicle_code: "", plate_number: "", brand: "", model: "", year: "", notes: "" });
+    setNewVehicle({ vehicle_code: "", brand: "", model: "", year: "", notes: "" });
     setShowAddForm(false);
     loadVehicles();
   }
@@ -143,22 +149,18 @@ export default function VehiclesPage() {
                 required
               />
               <FormField
-                label="Plate Number"
-                value={newVehicle.plate_number}
-                onChange={(e) => setNewVehicle({ ...newVehicle, plate_number: e.target.value })}
-                placeholder="e.g. HR38AF-4440"
-              />
-              <FormField
-                label="Brand"
+                label="Brand *"
                 value={newVehicle.brand}
                 onChange={(e) => setNewVehicle({ ...newVehicle, brand: e.target.value })}
                 placeholder="e.g. TOYOTA"
+                required
               />
               <FormField
-                label="Model"
+                label="Model *"
                 value={newVehicle.model}
                 onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
                 placeholder="e.g. INNOVA CRYSTA"
+                required
               />
               <FormField
                 label="Year"

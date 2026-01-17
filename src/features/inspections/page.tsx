@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
-import { loadSession } from "@/lib/auth";
+import { getSessionHeader, loadSession } from "@/lib/auth";
 import type { Session, InspectionRow, VehicleRow } from "@/lib/types";
-import { fetchInspections, deleteInspection, updateInspection } from "./api";
+import { buildExportUrl, fetchInspections, deleteInspection, updateInspection } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
 
 export default function InspectionsPage() {
@@ -45,14 +45,18 @@ export default function InspectionsPage() {
     setVehicles(res.vehicles || []);
   }
 
-  async function loadInspections() {
-    setLoading(true);
-    const filters: any = {};
+  function getFilters() {
+    const filters: Record<string, unknown> = {};
     if (vehicleFilter) filters.vehicle_id = vehicleFilter;
     if (vehicleSearch) filters.vehicle_query = vehicleSearch;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
+    return filters;
+  }
 
+  async function loadInspections() {
+    setLoading(true);
+    const filters = getFilters();
     const res = await fetchInspections({ filters, page: 1, pageSize: 100 });
     console.log("Inspections API response:", res);
     if (res.error) {
@@ -60,6 +64,27 @@ export default function InspectionsPage() {
     }
     setInspections(res.inspections || []);
     setLoading(false);
+  }
+
+  async function handleExport() {
+    const filters = getFilters();
+    const exportUrl = buildExportUrl({
+      type: "inspections",
+      format: "xlsx",
+      filters: Object.keys(filters).length ? filters : undefined,
+    });
+    const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
+    if (!res.ok) {
+      alert("Export failed");
+      return;
+    }
+    const blob = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "inspections.xlsx";
+    link.click();
+    URL.revokeObjectURL(objectUrl);
   }
 
   async function handleDelete(id: string) {
@@ -119,12 +144,20 @@ export default function InspectionsPage() {
               placeholder="To"
             />
           </div>
-          <button
-            onClick={loadInspections}
-            className="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white"
-          >
-            Apply Filters
-          </button>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={loadInspections}
+              className="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white"
+            >
+              Apply Filters
+            </button>
+            <button
+              onClick={handleExport}
+              className="w-full rounded-lg bg-slate-900 py-2 font-semibold text-white"
+            >
+              Export
+            </button>
+          </div>
         </div>
 
         {/* List */}
