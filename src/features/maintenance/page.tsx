@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { loadSession } from "@/lib/auth";
 import type { Session, MaintenanceRow, VehicleRow } from "@/lib/types";
-import { fetchMaintenance, deleteMaintenance } from "./api";
+import { fetchMaintenance, deleteMaintenance, updateMaintenance } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
 
 export default function MaintenancePage() {
@@ -19,6 +19,8 @@ export default function MaintenancePage() {
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Record<string, unknown>>({});
 
   const isAdmin = session?.user.role === "admin";
 
@@ -99,14 +101,14 @@ export default function MaintenancePage() {
           />
           <div className="grid grid-cols-2 gap-2">
             <input
-              type="date"
+              type="datetime-local"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="rounded-lg border-2 px-3 py-2 text-sm"
               placeholder="From"
             />
             <input
-              type="date"
+              type="datetime-local"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="rounded-lg border-2 px-3 py-2 text-sm"
@@ -143,7 +145,7 @@ export default function MaintenancePage() {
                         Vehicle ID: {item.vehicle_id?.substring(0, 8) || "Unknown"}
                       </div>
                       <div className="text-sm text-slate-600">
-                        {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km
+                        {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
                       </div>
                       <div className="mt-1 text-sm text-slate-600">
                         {item.supplier_name} • Bill: {item.bill_number}
@@ -158,15 +160,88 @@ export default function MaintenancePage() {
 
                 {expandedId === item.id && (
                   <div className="border-t border-emerald-100 bg-emerald-50 p-4">
-                    <div className="mb-2 text-xs text-slate-500">Remarks:</div>
-                    <div className="mb-3 text-sm text-slate-700">{item.remarks}</div>
-                    {isAdmin && (
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        className="w-full rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                      >
-                        Delete
-                      </button>
+                    {isAdmin && editId === item.id ? (
+                      <div className="space-y-3">
+                        <input
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={String(editDraft.odometer_km || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, odometer_km: Number(e.target.value) })}
+                          placeholder="Odometer"
+                        />
+                        <input
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={String(editDraft.bill_number || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, bill_number: e.target.value })}
+                          placeholder="Bill Number"
+                        />
+                        <input
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={String(editDraft.supplier_name || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, supplier_name: e.target.value })}
+                          placeholder="Supplier"
+                        />
+                        <input
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={String(editDraft.amount || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, amount: Number(e.target.value) })}
+                          placeholder="Amount"
+                        />
+                        <textarea
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          rows={3}
+                          value={String(editDraft.remarks || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, remarks: e.target.value })}
+                          placeholder="Remarks"
+                        />
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={async () => {
+                              await updateMaintenance({ id: item.id, ...editDraft });
+                              setEditId(null);
+                              loadMaintenance();
+                            }}
+                            className="flex-1 rounded-lg bg-emerald-600 py-2 text-sm font-semibold text-white"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditId(null)}
+                            className="flex-1 rounded-lg border border-slate-300 py-2 text-sm font-semibold text-slate-700"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mb-2 text-xs text-slate-500">Remarks:</div>
+                        <div className="mb-3 text-sm text-slate-700">{item.remarks}</div>
+                        {isAdmin && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEditId(item.id);
+                                setEditDraft({
+                                  odometer_km: item.odometer_km,
+                                  bill_number: item.bill_number,
+                                  supplier_name: item.supplier_name,
+                                  amount: item.amount,
+                                  remarks: item.remarks,
+                                });
+                              }}
+                              className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

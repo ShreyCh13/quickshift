@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { loadSession } from "@/lib/auth";
 import type { Session, InspectionRow, VehicleRow } from "@/lib/types";
-import { fetchInspections, deleteInspection } from "./api";
+import { fetchInspections, deleteInspection, updateInspection } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
 
 export default function InspectionsPage() {
@@ -18,6 +18,8 @@ export default function InspectionsPage() {
   const [dateTo, setDateTo] = useState("");
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Record<string, unknown>>({});
 
   const isAdmin = session?.user.role === "admin";
 
@@ -94,14 +96,14 @@ export default function InspectionsPage() {
           </select>
           <div className="grid grid-cols-2 gap-2">
             <input
-              type="date"
+              type="datetime-local"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="rounded-lg border-2 px-3 py-2 text-sm"
               placeholder="From"
             />
             <input
-              type="date"
+              type="datetime-local"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="rounded-lg border-2 px-3 py-2 text-sm"
@@ -134,11 +136,11 @@ export default function InspectionsPage() {
                 >
                   <div className="flex items-start justify-between">
                     <div>
-                      <div className="font-bold text-slate-900">
+                    <div className="font-bold text-slate-900">
                         Vehicle ID: {item.vehicle_id?.substring(0, 8) || "Unknown"}
                       </div>
                       <div className="text-sm text-slate-600">
-                        {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km
+                      {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
                       </div>
                       {item.driver_name && <div className="text-xs text-slate-500">Driver: {item.driver_name}</div>}
                     </div>
@@ -149,23 +151,95 @@ export default function InspectionsPage() {
                 {expandedId === item.id && (
                   <div className="border-t border-blue-100 bg-blue-50 p-4">
                     <h4 className="mb-2 font-semibold text-slate-900">Inspection Details:</h4>
-                    <div className="space-y-1 text-sm">
-                      {Object.entries(item.remarks_json || {}).map(([key, value]) => (
-                        <div key={key} className="flex justify-between">
-                          <span className="font-medium text-slate-700">{key}:</span>
-                          <span className="text-slate-600">{String(value)}</span>
+                    {isAdmin && editId === item.id ? (
+                      <div className="space-y-3">
+                        <input
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={String(editDraft.odometer_km || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, odometer_km: Number(e.target.value) })}
+                          placeholder="Odometer"
+                        />
+                        <input
+                          className="w-full rounded-md border px-3 py-2 text-sm"
+                          value={String(editDraft.driver_name || "")}
+                          onChange={(e) => setEditDraft({ ...editDraft, driver_name: e.target.value })}
+                          placeholder="Driver Name"
+                        />
+                        <div className="space-y-2">
+                          {Object.entries((editDraft.remarks_json as Record<string, string>) || {}).map(
+                            ([key, value]) => (
+                              <div key={key} className="flex items-center gap-2">
+                                <span className="w-32 text-xs font-semibold text-slate-600">{key}</span>
+                                <input
+                                  className="flex-1 rounded-md border px-2 py-1 text-sm"
+                                  value={value}
+                                  onChange={(e) =>
+                                    setEditDraft({
+                                      ...editDraft,
+                                      remarks_json: {
+                                        ...(editDraft.remarks_json as Record<string, string>),
+                                        [key]: e.target.value,
+                                      },
+                                    })
+                                  }
+                                />
+                              </div>
+                            ),
+                          )}
                         </div>
-                      ))}
-                    </div>
-                    {isAdmin && (
-                      <div className="mt-4 flex gap-2">
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                        >
-                          Delete
-                        </button>
+                        <div className="flex gap-2 pt-2">
+                          <button
+                            onClick={async () => {
+                              await updateInspection({ id: item.id, ...editDraft });
+                              setEditId(null);
+                              loadInspections();
+                            }}
+                            className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => setEditId(null)}
+                            className="flex-1 rounded-lg border border-slate-300 py-2 text-sm font-semibold text-slate-700"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      <>
+                        <div className="space-y-1 text-sm">
+                          {Object.entries(item.remarks_json || {}).map(([key, value]) => (
+                            <div key={key} className="flex justify-between">
+                              <span className="font-medium text-slate-700">{key}:</span>
+                              <span className="text-slate-600">{String(value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {isAdmin && (
+                          <div className="mt-4 flex gap-2">
+                            <button
+                              onClick={() => {
+                                setEditId(item.id);
+                                setEditDraft({
+                                  odometer_km: item.odometer_km,
+                                  driver_name: item.driver_name || "",
+                                  remarks_json: item.remarks_json || {},
+                                });
+                              }}
+                              className="flex-1 rounded-lg bg-slate-900 py-2 text-sm font-semibold text-white"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
