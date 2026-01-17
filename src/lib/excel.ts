@@ -9,8 +9,9 @@ export function rowsToWorkbook(sheetName: string, rows: Record<string, unknown>[
   return wb;
 }
 
-export function workbookToBuffer(wb: XLSX.WorkBook): Buffer {
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+export function workbookToBuffer(wb: XLSX.WorkBook): Uint8Array {
+  const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+  return new Uint8Array(buffer);
 }
 
 export function rowsToCsv(rows: Record<string, unknown>[]) {
