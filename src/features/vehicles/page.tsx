@@ -41,7 +41,13 @@ export default function VehiclesPage() {
   async function loadVehicles() {
     setLoading(true);
     const data = await fetchVehicles({ search, page: 1, pageSize: 200 });
-    setVehicles(data.vehicles || []);
+    if (data.error) {
+      setError(data.error);
+      setVehicles([]);
+    } else {
+      setError(null);
+      setVehicles(data.vehicles || []);
+    }
     setLoading(false);
   }
 
@@ -88,7 +94,17 @@ export default function VehiclesPage() {
   return (
     <MobileShell title="Vehicles">
       <div className="space-y-4 p-4">
-        {error && <Toast message={error} tone="error" />}
+        {error && (
+          <div className="space-y-2">
+            <Toast message={error} tone="error" />
+            <button
+              onClick={loadVehicles}
+              className="w-full rounded-lg border-2 border-slate-300 bg-white py-2 text-sm font-semibold text-slate-700"
+            >
+              Retry Load
+            </button>
+          </div>
+        )}
 
         <input
           type="text"
