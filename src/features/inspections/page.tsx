@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { loadSession } from "@/lib/auth";
@@ -20,6 +20,14 @@ export default function InspectionsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Record<string, unknown>>({});
+  const vehicleMap = useMemo(() => {
+    const map = new Map<string, string>();
+    vehicles.forEach((v) => {
+      const label = `${v.vehicle_code}${v.plate_number ? ` • ${v.plate_number}` : ""} • ${v.brand || ""} ${v.model || ""}`.trim();
+      map.set(v.id, label);
+    });
+    return map;
+  }, [vehicles]);
 
   const isAdmin = session?.user.role === "admin";
 
@@ -137,8 +145,8 @@ export default function InspectionsPage() {
                   <div className="flex items-start justify-between">
                     <div>
                     <div className="font-bold text-slate-900">
-                        Vehicle ID: {item.vehicle_id?.substring(0, 8) || "Unknown"}
-                      </div>
+                      {vehicleMap.get(item.vehicle_id) || `Vehicle ID: ${item.vehicle_id?.substring(0, 8) || "Unknown"}`}
+                    </div>
                       <div className="text-sm text-slate-600">
                       {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
                       </div>

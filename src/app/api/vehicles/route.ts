@@ -16,10 +16,14 @@ export async function GET(req: Request) {
   const to = from + pageSize - 1;
 
   const supabase = getSupabaseAdmin();
-  let query = supabase.from("vehicles").select("id, vehicle_code, brand, model, year, notes, is_active, created_at, updated_at", { count: "exact" });
+  let query = supabase
+    .from("vehicles")
+    .select("id, vehicle_code, plate_number, brand, model, year, notes, is_active, created_at, updated_at", {
+      count: "exact",
+    });
   if (typeof search === "string" && search.trim()) {
     const term = `%${search.trim()}%`;
-    query = query.or(`vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
+    query = query.or(`vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
   }
   if (isActive === "true") query = query.eq("is_active", true);
   if (isActive === "false") query = query.eq("is_active", false);

@@ -2,67 +2,101 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 
+function parseFilters(url: URL) {
+  const raw = url.searchParams.get("filters");
+  if (!raw) return {};
+  try {
+    const decoded = Buffer.from(raw, "base64").toString("utf8");
+    return JSON.parse(decoded);
+  } catch {
+    return {};
+  }
+}
+
 export async function GET(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getSupabaseAdmin();
+  const url = new URL(req.url);
+  const filters = parseFilters(url);
 
-  // Fetch all data (only non-deleted records)
-  const [
-    { data: maintenance, error: maintenanceError },
-    { data: inspections, error: inspectionsError },
-    { data: vehicles, error: vehiclesError },
-    { count: totalInspections },
-    { count: totalMaintenance },
-  ] = await Promise.all([
-    supabase.from("maintenance").select("amount, supplier_name, vehicle_id, created_at"),
-    supabase.from("inspections").select("vehicle_id, created_at"),
-    supabase.from("vehicles").select("id, vehicle_code").eq("is_active", true),
-    supabase.from("inspections").select("*", { count: "exact", head: true }),
-    supabase.from("maintenance").select("*", { count: "exact", head: true }),
-  ]);
+  const brand = filters.brand as string | undefined;
+  const vehicleId = filters.vehicle_id as string | undefined;
+  const dateFrom = filters.date_from as string | undefined;
+  const dateTo = filters.date_to as string | undefined;
+  const supplier = filters.supplier as string | undefined;
+  const type = (filters.type as string | undefined) || "all";
 
-  if (maintenanceError || inspectionsError || vehiclesError) {
-    console.error("Failed to load analytics:", { maintenanceError, inspectionsError, vehiclesError });
-    return NextResponse.json({ error: "Failed to load analytics" }, { status: 500 });
+  let vehiclesQuery = supabase.from("vehicles").select("id, vehicle_code, brand, model").eq("is_active", true);
+  if (brand) vehiclesQuery = vehiclesQuery.eq("brand", brand);
+  if (vehicleId) vehiclesQuery = vehiclesQuery.eq("id", vehicleId);
+  const { data: vehicles, error: vehiclesError } = await vehiclesQuery;
+  if (vehiclesError) return NextResponse.json({ error: "Failed to load vehicles" }, { status: 500 });
+
+  const vehicleIds = new Set((vehicles || []).map((v) => v.id));
+  const ids = Array.from(vehicleIds);
+
+  let maintenanceQuery = supabase
+    .from("maintenance")
+    .select("id, vehicle_id, created_at, odometer_km, bill_number, supplier_name, amount, remarks, vehicles(vehicle_code, brand, model)");
+  let inspectionsQuery = supabase
+    .from("inspections")
+    .select("id, vehicle_id, created_at, odometer_km, driver_name, remarks_json, vehicles(vehicle_code, brand, model)");
+
+  if (ids.length > 0) {
+    maintenanceQuery = maintenanceQuery.in("vehicle_id", ids);
+    inspectionsQuery = inspectionsQuery.in("vehicle_id", ids);
+  }
+  if (dateFrom) {
+    maintenanceQuery = maintenanceQuery.gte("created_at", dateFrom);
+    inspectionsQuery = inspectionsQuery.gte("created_at", dateFrom);
+  }
+  if (dateTo) {
+    maintenanceQuery = maintenanceQuery.lte("created_at", dateTo);
+    inspectionsQuery = inspectionsQuery.lte("created_at", dateTo);
+  }
+  if (supplier) {
+    maintenanceQuery = maintenanceQuery.ilike("supplier_name", `%${supplier}%`);
   }
 
-  // Monthly totals
+  const [maintenanceRes, inspectionsRes] = await Promise.all([
+    type === "inspections" ? Promise.resolve({ data: [] }) : maintenanceQuery.order("created_at", { ascending: false }),
+    type === "maintenance" ? Promise.resolve({ data: [] }) : inspectionsQuery.order("created_at", { ascending: false }),
+  ]);
+
+  const maintenance = maintenanceRes.data || [];
+  const inspections = inspectionsRes.data || [];
+
   const monthlyTotals: Record<string, number> = {};
-  maintenance?.forEach((row) => {
+  maintenance.forEach((row) => {
     const date = new Date(row.created_at);
     const monthKey = date.toLocaleString("default", { month: "short", year: "numeric" });
     monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + Number(row.amount || 0);
   });
 
-  // Supplier aggregation
   const supplierData: Record<string, { total: number; count: number }> = {};
-  maintenance?.forEach((row) => {
-    const supplier = row.supplier_name;
-    if (!supplierData[supplier]) supplierData[supplier] = { total: 0, count: 0 };
-    supplierData[supplier].total += Number(row.amount || 0);
-    supplierData[supplier].count += 1;
+  maintenance.forEach((row) => {
+    const key = row.supplier_name || "Unknown";
+    if (!supplierData[key]) supplierData[key] = { total: 0, count: 0 };
+    supplierData[key].total += Number(row.amount || 0);
+    supplierData[key].count += 1;
   });
 
-  // Vehicle aggregation
   const vehicleData: Record<
     string,
     { maintenance_count: number; inspection_count: number; total: number; vehicle_code: string }
   > = {};
-
-  vehicles?.forEach((v) => {
+  (vehicles || []).forEach((v) => {
     vehicleData[v.id] = { maintenance_count: 0, inspection_count: 0, total: 0, vehicle_code: v.vehicle_code };
   });
-
-  maintenance?.forEach((m) => {
+  maintenance.forEach((m) => {
     if (vehicleData[m.vehicle_id]) {
       vehicleData[m.vehicle_id].maintenance_count += 1;
       vehicleData[m.vehicle_id].total += Number(m.amount || 0);
     }
   });
-
-  inspections?.forEach((i) => {
+  inspections.forEach((i) => {
     if (vehicleData[i.vehicle_id]) {
       vehicleData[i.vehicle_id].inspection_count += 1;
     }
@@ -74,7 +108,7 @@ export async function GET(req: Request) {
     .slice(0, 12);
 
   const topSuppliers = Object.entries(supplierData)
-    .map(([supplier, data]) => ({ supplier, total: data.total, count: data.count }))
+    .map(([supplierName, data]) => ({ supplier: supplierName, total: data.total, count: data.count }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 10);
 
@@ -84,10 +118,13 @@ export async function GET(req: Request) {
     .slice(0, 10);
 
   return NextResponse.json({
+    filters,
+    inspections,
+    maintenance,
     monthly,
     topSuppliers,
     topVehicles,
-    totalInspections: totalInspections || 0,
-    totalMaintenance: totalMaintenance || 0,
+    totalInspections: inspections.length,
+    totalMaintenance: maintenance.length,
   });
 }

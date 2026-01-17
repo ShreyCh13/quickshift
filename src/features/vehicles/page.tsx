@@ -20,6 +20,7 @@ export default function VehiclesPage() {
 
   const [newVehicle, setNewVehicle] = useState({
     vehicle_code: "",
+    plate_number: "",
     brand: "",
     model: "",
     year: "",
@@ -57,6 +58,7 @@ export default function VehiclesPage() {
     setError(null);
     const payload = {
       vehicle_code: newVehicle.vehicle_code,
+      plate_number: newVehicle.plate_number || null,
       brand: newVehicle.brand || null,
       model: newVehicle.model || null,
       year: newVehicle.year ? Number(newVehicle.year) : null,
@@ -67,7 +69,7 @@ export default function VehiclesPage() {
       setError(res.error);
       return;
     }
-    setNewVehicle({ vehicle_code: "", brand: "", model: "", year: "", notes: "" });
+    setNewVehicle({ vehicle_code: "", plate_number: "", brand: "", model: "", year: "", notes: "" });
     setShowAddForm(false);
     loadVehicles();
   }
@@ -99,7 +101,7 @@ export default function VehiclesPage() {
         <datalist id="vehicle-search">
           {vehicles.map((v) => (
             <option key={v.id} value={v.vehicle_code}>
-              {v.brand} {v.model}
+              {v.plate_number ? `${v.plate_number} • ` : ""}{v.brand} {v.model}
             </option>
           ))}
         </datalist>
@@ -123,6 +125,12 @@ export default function VehiclesPage() {
                 onChange={(e) => setNewVehicle({ ...newVehicle, vehicle_code: e.target.value })}
                 placeholder="e.g. HR38AF-4440"
                 required
+              />
+              <FormField
+                label="Plate Number"
+                value={newVehicle.plate_number}
+                onChange={(e) => setNewVehicle({ ...newVehicle, plate_number: e.target.value })}
+                placeholder="e.g. HR38AF-4440"
               />
               <FormField
                 label="Brand"
@@ -180,6 +188,9 @@ export default function VehiclesPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="text-xl font-bold text-slate-900">{v.vehicle_code}</div>
+                    {v.plate_number && (
+                      <div className="mt-1 text-xs font-medium text-slate-500">Plate: {v.plate_number}</div>
+                    )}
                     <div className="mt-1 flex items-center gap-2 text-sm text-slate-600">
                       {v.brand && <span className="font-medium text-blue-700">{v.brand}</span>}
                       {v.model && <span>{v.model}</span>}

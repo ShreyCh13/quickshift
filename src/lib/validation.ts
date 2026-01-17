@@ -23,6 +23,7 @@ export const userUpdateSchema = z.object({
 export const vehicleSchema = z.object({
   id: z.string().uuid().optional(),
   vehicle_code: z.string().min(1).max(50),
+  plate_number: z.string().max(50).optional().nullable(),
   brand: z.string().max(100).optional().nullable(),
   model: z.string().max(100).optional().nullable(),
   year: z.number().int().min(1900).max(new Date().getFullYear() + 1).optional().nullable(),

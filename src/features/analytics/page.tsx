@@ -41,7 +41,14 @@ export default function AnalyticsPage() {
 
   async function loadAnalytics() {
     setLoading(true);
-    const result = await fetchAnalytics();
+    const result = await fetchAnalytics({
+      brand: brandFilter || undefined,
+      vehicle_id: vehicleFilter || undefined,
+      type: typeFilter,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      supplier: supplierFilter || undefined,
+    });
     setData(result);
     setLoading(false);
   }
@@ -56,7 +63,13 @@ export default function AnalyticsPage() {
     <MobileShell title="Analytics Dashboard">
       <div className="space-y-6 bg-slate-50 p-4">
         {/* Filters Panel */}
-        <div className="rounded-xl bg-white p-4 shadow-sm">
+        <form
+          className="rounded-xl bg-white p-4 shadow-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            loadAnalytics();
+          }}
+        >
           <h3 className="mb-4 text-lg font-bold text-slate-900">Filters</h3>
           <div className="space-y-3">
             <label className="block">
@@ -108,7 +121,7 @@ export default function AnalyticsPage() {
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">From Date</span>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
                   className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
@@ -117,7 +130,7 @@ export default function AnalyticsPage() {
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-slate-700">To Date</span>
                 <input
-                  type="date"
+                  type="datetime-local"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
                   className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
@@ -137,13 +150,13 @@ export default function AnalyticsPage() {
             </label>
 
             <button
-              onClick={loadAnalytics}
+              type="submit"
               className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700"
             >
               Apply Filters
             </button>
           </div>
-        </div>
+        </form>
 
         {loading ? (
           <div className="py-12 text-center text-slate-400">Loading...</div>
@@ -222,6 +235,61 @@ export default function AnalyticsPage() {
                 <div className="text-xs font-semibold opacity-90">Total Maintenance</div>
                 <div className="mt-1 text-3xl font-bold">{data?.totalMaintenance || 0}</div>
               </div>
+            </div>
+
+            {/* Filtered Results */}
+            <div className="rounded-xl bg-white p-6 shadow-sm">
+              <h3 className="mb-4 text-lg font-bold text-slate-900">Filtered Results</h3>
+
+              {typeFilter !== "maintenance" && (
+                <div className="mb-6">
+                  <h4 className="mb-2 text-sm font-semibold text-blue-700">Inspections</h4>
+                  {(data?.inspections || []).length === 0 ? (
+                    <p className="text-sm text-slate-500">No inspections match these filters.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {data.inspections.map((item: any) => (
+                        <div key={item.id} className="rounded-md border border-blue-100 p-3 text-sm">
+                          <div className="font-semibold text-slate-900">
+                            {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
+                          </div>
+                          <div className="text-slate-600">
+                            {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
+                          </div>
+                          {item.driver_name && (
+                            <div className="text-xs text-slate-500">Driver: {item.driver_name}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {typeFilter !== "inspections" && (
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-emerald-700">Maintenance</h4>
+                  {(data?.maintenance || []).length === 0 ? (
+                    <p className="text-sm text-slate-500">No maintenance entries match these filters.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {data.maintenance.map((item: any) => (
+                        <div key={item.id} className="rounded-md border border-emerald-100 p-3 text-sm">
+                          <div className="font-semibold text-slate-900">
+                            {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
+                          </div>
+                          <div className="text-slate-600">
+                            {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
+                          </div>
+                          <div className="text-slate-600">
+                            {item.supplier_name} • ₹{item.amount}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}
