@@ -194,7 +194,10 @@ export default function InspectionsPage() {
                 {expandedId === item.id && (
                   <div className="border-t border-blue-100 bg-blue-50 p-4">
                     <h4 className="mb-2 font-semibold text-slate-900">Inspection Details:</h4>
-                    {isAdmin && editId === item.id ? (
+                    {(() => {
+                      const canEdit = isAdmin || item.created_by === session?.user.id;
+                      if (canEdit && editId === item.id) {
+                        return (
                       <div className="space-y-3">
                         <input
                           className="w-full rounded-md border px-3 py-2 text-sm"
@@ -249,8 +252,11 @@ export default function InspectionsPage() {
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <>
+                      </div>
+                        );
+                      }
+                      return (
+                        <>
                         <div className="space-y-1 text-sm">
                           {Object.entries(item.remarks_json || {}).map(([key, value]) => (
                             <div key={key} className="flex justify-between">
@@ -259,7 +265,7 @@ export default function InspectionsPage() {
                             </div>
                           ))}
                         </div>
-                        {isAdmin && (
+                        {canEdit && (
                           <div className="mt-4 flex gap-2">
                             <button
                               onClick={() => {
@@ -274,16 +280,19 @@ export default function InspectionsPage() {
                             >
                               Edit
                             </button>
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                            >
-                              Delete
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>

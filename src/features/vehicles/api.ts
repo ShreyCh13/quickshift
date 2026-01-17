@@ -20,6 +20,9 @@ export async function fetchVehicles(params: {
       if (data && typeof data === "object") return data;
       return { error: "Failed to load vehicles", details: `${res.status} ${res.statusText}` };
     }
+    if (!data || typeof data !== "object") {
+      return { error: "Failed to load vehicles", details: "Empty response" };
+    }
     return data;
   } catch (err) {
     const message = err instanceof Error ? err.message : "Network error";

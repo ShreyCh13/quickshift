@@ -96,13 +96,23 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "staff"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
     const input = maintenanceUpdateSchema.parse(await req.json());
     const { id, ...updates } = input;
     const supabase = getSupabaseAdmin();
+    if (session.user.role !== "admin") {
+      const { data: existing, error: existingError } = await supabase
+        .from("maintenance")
+        .select("created_by")
+        .eq("id", id)
+        .single();
+      if (existingError || !existing || existing.created_by !== session.user.id) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
     const { data, error } = await supabase
       .from("maintenance")
       .update({ ...updates, updated_by: session.user.id })

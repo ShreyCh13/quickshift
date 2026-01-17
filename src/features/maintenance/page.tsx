@@ -203,8 +203,11 @@ export default function MaintenancePage() {
 
                 {expandedId === item.id && (
                   <div className="border-t border-emerald-100 bg-emerald-50 p-4">
-                    {isAdmin && editId === item.id ? (
-                      <div className="space-y-3">
+                    {(() => {
+                      const canEdit = isAdmin || item.created_by === session?.user.id;
+                      if (canEdit && editId === item.id) {
+                        return (
+                          <div className="space-y-3">
                         <input
                           className="w-full rounded-md border px-3 py-2 text-sm"
                           value={String(editDraft.odometer_km || "")}
@@ -255,11 +258,14 @@ export default function MaintenancePage() {
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      <>
+                          </div>
+                        );
+                      }
+                      return (
+                        <>
                         <div className="mb-2 text-xs text-slate-500">Remarks:</div>
                         <div className="mb-3 text-sm text-slate-700">{item.remarks}</div>
-                        {isAdmin && (
+                        {canEdit && (
                           <div className="flex gap-2">
                             <button
                               onClick={() => {
@@ -276,16 +282,19 @@ export default function MaintenancePage() {
                             >
                               Edit
                             </button>
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
-                            >
-                              Delete
-                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-semibold text-white hover:bg-red-700"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
-                    )}
+                      );
+                    })()}
                   </div>
                 )}
               </div>

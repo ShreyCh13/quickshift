@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
-import { loadSession } from "@/lib/auth";
+import { clearSession, loadSession } from "@/lib/auth";
 import type { Session, VehicleRow } from "@/lib/types";
 import { fetchVehicles, createVehicle, deleteVehicle } from "./api";
 import FormField from "@/components/FormField";
@@ -40,12 +40,23 @@ export default function VehiclesPage() {
   async function loadVehicles() {
     setLoading(true);
     const data = await fetchVehicles({ search, page: 1, pageSize: 200 });
-    if (data.error) {
-      setError(data.details ? `${data.error}: ${data.details}` : data.error);
+    if (!data || typeof data !== "object") {
+      setError("Failed to load vehicles: Empty response");
+      setVehicles([]);
+      setLoading(false);
+      return;
+    }
+    if ("error" in data && data.error) {
+      if (data.error === "Unauthorized") {
+        clearSession();
+        router.replace("/login");
+        return;
+      }
+      setError("details" in data && data.details ? `${data.error}: ${data.details}` : data.error);
       setVehicles([]);
     } else {
       setError(null);
-      setVehicles(data.vehicles || []);
+      setVehicles("vehicles" in data && Array.isArray(data.vehicles) ? data.vehicles : []);
     }
     setLoading(false);
   }
