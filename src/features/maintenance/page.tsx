@@ -140,7 +140,7 @@ export default function MaintenancePage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="font-bold text-slate-900">
-                        {item.vehicles?.vehicle_code || "Unknown Vehicle"}
+                        Vehicle ID: {item.vehicle_id?.substring(0, 8) || "Unknown"}
                       </div>
                       <div className="text-sm text-slate-600">
                         {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km

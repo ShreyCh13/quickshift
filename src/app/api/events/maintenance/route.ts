@@ -31,7 +31,7 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from("maintenance")
-    .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, amount, remarks, created_by, vehicles(vehicle_code, brand, model), users(display_name)", { count: "exact" })
+    .select("*", { count: "exact" })
 ;
 
   if (filters.vehicle_id) query = query.eq("vehicle_id", filters.vehicle_id);
