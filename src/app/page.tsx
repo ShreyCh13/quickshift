@@ -102,27 +102,34 @@ export default function Home() {
           </div>
 
           {/* Secondary Actions */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => router.push("/inspections")}
               className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
             >
-              <span className="text-xs font-semibold text-slate-600">View</span>
-              <span className="mt-1 text-sm font-bold text-blue-600">Inspections</span>
+              <span className="text-2xl">📋</span>
+              <span className="mt-1 text-sm font-bold text-blue-600">View Inspections</span>
             </button>
             <button
               onClick={() => router.push("/maintenance")}
               className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
             >
-              <span className="text-xs font-semibold text-slate-600">View</span>
-              <span className="mt-1 text-sm font-bold text-emerald-600">Maintenance</span>
+              <span className="text-2xl">🔧</span>
+              <span className="mt-1 text-sm font-bold text-emerald-600">View Maintenance</span>
             </button>
             <button
               onClick={() => router.push("/analytics")}
               className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
             >
-              <span className="text-xs font-semibold text-slate-600">View</span>
+              <span className="text-2xl">📊</span>
               <span className="mt-1 text-sm font-bold text-purple-600">Analytics</span>
+            </button>
+            <button
+              onClick={() => router.push("/settings")}
+              className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
+            >
+              <span className="text-2xl">⚙️</span>
+              <span className="mt-1 text-sm font-bold text-slate-600">Settings</span>
             </button>
           </div>
         </div>

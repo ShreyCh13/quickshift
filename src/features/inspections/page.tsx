@@ -1,261 +1,127 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
-import FormField from "@/components/FormField";
-import DataTable from "@/components/DataTable";
-import Toast from "@/components/Toast";
-import { loadSession, getSessionHeader } from "@/lib/auth";
-import type { InspectionRow, RemarkFieldRow, Session, VehicleRow } from "@/lib/types";
-import { RemarkFieldsForm } from "./components";
-import { fetchInspections, createInspection } from "./api";
+import { loadSession } from "@/lib/auth";
+import type { Session, InspectionRow, VehicleRow } from "@/lib/types";
+import { fetchInspections } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
-import { fetchRemarkFields, buildExportUrl } from "@/features/admin/api";
 
 export default function InspectionsPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
-  const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
-  const [remarkFields, setRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [inspections, setInspections] = useState<InspectionRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const [filtersState, setFiltersState] = useState({
-    vehicle_id: "",
-    date_from: "",
-    date_to: "",
-    odometer_min: "",
-    odometer_max: "",
-  });
-  const [form, setForm] = useState({
-    vehicle_id: "",
-    odometer_km: "",
-    driver_name: "",
-  });
-  const [remarks, setRemarks] = useState<Record<string, string>>({});
+  const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
+  const [vehicleFilter, setVehicleFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const sessionData = loadSession();
-    if (!sessionData) {
+    const s = loadSession();
+    if (!s) {
       router.replace("/login");
       return;
     }
-    setSession(sessionData);
+    setSession(s);
+    loadVehicles();
+    loadInspections();
   }, [router]);
 
-  useEffect(() => {
-    if (!session) return;
-    fetchVehicles({ page: 1, pageSize: 200, isActive: true }).then((res) =>
-      setVehicles(res.vehicles || []),
-    );
-    fetchRemarkFields(true).then((res) => setRemarkFields(res.remarkFields || []));
-  }, [session]);
+  async function loadVehicles() {
+    const res = await fetchVehicles({ page: 1, pageSize: 200 });
+    setVehicles(res.vehicles || []);
+  }
 
   async function loadInspections() {
-    const remarkFilters = Object.fromEntries(
-      Object.entries(filters).filter(([, value]) => value),
-    );
-    const filterPayload: Record<string, unknown> = {
-      vehicle_id: filtersState.vehicle_id || undefined,
-      date_from: filtersState.date_from || undefined,
-      date_to: filtersState.date_to || undefined,
-      odometer_min: filtersState.odometer_min ? Number(filtersState.odometer_min) : undefined,
-      odometer_max: filtersState.odometer_max ? Number(filtersState.odometer_max) : undefined,
-      remarks: Object.keys(remarkFilters).length ? remarkFilters : undefined,
-    };
-    const data = await fetchInspections({ filters: filterPayload, page: 1, pageSize: 50 });
-    if (data.error) setError(data.error);
-    setInspections(data.inspections || []);
+    setLoading(true);
+    const filters: any = {};
+    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+
+    const res = await fetchInspections({ filters, page: 1, pageSize: 100 });
+    setInspections(res.inspections || []);
+    setLoading(false);
   }
 
-  useEffect(() => {
-    if (!session) return;
-    loadInspections();
-  }, [session, filtersState, filters]);
-
-  async function handleCreate() {
-    setError(null);
-    const payload = {
-      vehicle_id: form.vehicle_id,
-      odometer_km: Number(form.odometer_km),
-      driver_name: form.driver_name || null,
-      remarks_json: remarks,
-    };
-    const res = await createInspection(payload);
-    if (res.error) {
-      setError(res.error);
-      return;
-    }
-    setForm({ vehicle_id: "", odometer_km: "", driver_name: "" });
-    setRemarks({});
-    loadInspections();
-  }
-
-  const exportUrl = useMemo(() => {
-    const remarkFilters = Object.entries(filters).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value) acc[key] = value;
-      return acc;
-    }, {});
-    return buildExportUrl({
-      type: "inspections",
-      format: "xlsx",
-      filters: {
-        vehicle_id: filtersState.vehicle_id || undefined,
-        date_from: filtersState.date_from || undefined,
-        date_to: filtersState.date_to || undefined,
-        odometer_min: filtersState.odometer_min ? Number(filtersState.odometer_min) : undefined,
-        odometer_max: filtersState.odometer_max ? Number(filtersState.odometer_max) : undefined,
-        remarks: Object.keys(remarkFilters).length ? remarkFilters : undefined,
-      },
-    });
-  }, [filtersState, filters]);
-
-  async function downloadExport() {
-    const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
-    if (!res.ok) {
-      setError("Export failed");
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "inspections.xlsx";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  if (!session) return null;
 
   return (
     <MobileShell title="Inspections">
-      <div className="space-y-4">
-        {error ? <Toast message={error} tone="error" /> : null}
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4 pb-24">
+        {/* Quick Add Button */}
+        <button
+          onClick={() => router.push("/inspections/new")}
+          className="mb-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 py-4 text-lg font-bold text-white shadow-lg hover:shadow-xl"
+        >
+          + New Inspection
+        </button>
 
-        <div className="rounded-lg border bg-white p-3">
-          <div className="text-sm font-semibold text-slate-900">New Inspection</div>
-          <div className="space-y-3 pt-2">
-            <label className="block text-sm">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Vehicle</span>
-              <select
-                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base"
-                value={form.vehicle_id}
-                onChange={(e) => setForm({ ...form, vehicle_id: e.target.value })}
-                required
-              >
-                <option value="">Select vehicle</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.vehicle_code} - {vehicle.brand} {vehicle.model}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <FormField
-              label="Odometer (km)"
-              value={form.odometer_km}
-              onChange={(e) => setForm({ ...form, odometer_km: e.target.value })}
-              required
+        {/* Filters */}
+        <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
+          <h3 className="font-bold text-slate-900">Filters</h3>
+          <select
+            value={vehicleFilter}
+            onChange={(e) => setVehicleFilter(e.target.value)}
+            className="w-full rounded-lg border-2 px-3 py-2 text-sm"
+          >
+            <option value="">All Vehicles</option>
+            {vehicles.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.vehicle_code} - {v.brand} {v.model}
+              </option>
+            ))}
+          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border-2 px-3 py-2 text-sm"
             />
-            <FormField
-              label="Driver Name"
-              value={form.driver_name}
-              onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border-2 px-3 py-2 text-sm"
             />
-            <RemarkFieldsForm
-              remarkFields={remarkFields}
-              values={remarks}
-              onChange={(key, value) => setRemarks((prev) => ({ ...prev, [key]: value }))}
-            />
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="h-12 w-full rounded-md bg-emerald-600 text-base font-semibold text-white"
-            >
-              Save Inspection
-            </button>
           </div>
+          <button
+            onClick={loadInspections}
+            className="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white"
+          >
+            Apply Filters
+          </button>
         </div>
 
-        <div className="rounded-lg border bg-white p-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-slate-900">Filters</div>
-            <button
-              type="button"
-              onClick={downloadExport}
-              className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white"
-            >
-              Export
-            </button>
+        {/* List */}
+        {loading ? (
+          <div className="py-12 text-center text-slate-400">Loading...</div>
+        ) : inspections.length === 0 ? (
+          <div className="rounded-xl bg-white p-8 text-center shadow">
+            <p className="text-slate-500">No inspections found</p>
           </div>
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <label className="block text-sm">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Vehicle</span>
-              <select
-                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base"
-                value={filtersState.vehicle_id}
-                onChange={(e) => setFiltersState({ ...filtersState, vehicle_id: e.target.value })}
-              >
-                <option value="">All vehicles</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.vehicle_code}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <FormField
-              label="Date From"
-              type="date"
-              value={filtersState.date_from}
-              onChange={(e) => setFiltersState({ ...filtersState, date_from: e.target.value })}
-            />
-            <FormField
-              label="Date To"
-              type="date"
-              value={filtersState.date_to}
-              onChange={(e) => setFiltersState({ ...filtersState, date_to: e.target.value })}
-            />
-            <FormField
-              label="Odometer Min"
-              value={filtersState.odometer_min}
-              onChange={(e) => setFiltersState({ ...filtersState, odometer_min: e.target.value })}
-            />
-            <FormField
-              label="Odometer Max"
-              value={filtersState.odometer_max}
-              onChange={(e) => setFiltersState({ ...filtersState, odometer_max: e.target.value })}
-            />
-            {remarkFields.map((field) => (
-              <FormField
-                key={field.key}
-                label={`Remark contains (${field.label})`}
-                value={filters[field.key] || ""}
-                onChange={(e) =>
-                  setFilters((prev) => ({ ...prev, [field.key]: e.target.value }))
-                }
-              />
+        ) : (
+          <div className="space-y-3">
+            {inspections.map((item: any) => (
+              <div key={item.id} className="rounded-xl border-2 border-blue-100 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="font-bold text-slate-900">
+                      {item.vehicles?.vehicle_code || "Unknown Vehicle"}
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km
+                    </div>
+                    {item.driver_name && <div className="text-xs text-slate-500">Driver: {item.driver_name}</div>}
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-
-        <DataTable
-          columns={[
-            { key: "created_at", label: "Date", render: (row) => new Date(row.created_at).toLocaleDateString() },
-            { key: "odometer_km", label: "Odometer" },
-            { key: "driver_name", label: "Driver" },
-          ]}
-          rows={inspections}
-          renderExpanded={(row) => (
-            <div className="space-y-1 text-sm">
-              {Object.entries(row.remarks_json || {}).map(([key, value]) => (
-                <div key={key} className="flex justify-between">
-                  <span className="text-slate-500">{key}</span>
-                  <span className="text-slate-900">{value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        />
+        )}
       </div>
     </MobileShell>
   );

@@ -1,301 +1,142 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
-import FormField from "@/components/FormField";
-import DataTable from "@/components/DataTable";
-import Toast from "@/components/Toast";
-import { loadSession, getSessionHeader } from "@/lib/auth";
-import type { MaintenanceRow, Session, VehicleRow } from "@/lib/types";
-import { fetchMaintenance, createMaintenance } from "./api";
+import { loadSession } from "@/lib/auth";
+import type { Session, MaintenanceRow, VehicleRow } from "@/lib/types";
+import { fetchMaintenance } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
-import { buildExportUrl } from "@/features/admin/api";
-import { StatCard } from "./components";
 
 export default function MaintenancePage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
+  const [maintenance, setMaintenance] = useState<MaintenanceRow[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
-  const [items, setItems] = useState<MaintenanceRow[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState({
-    vehicle_id: "",
-    date_from: "",
-    date_to: "",
-    odometer_min: "",
-    odometer_max: "",
-    supplier: "",
-    amount_min: "",
-    amount_max: "",
-  });
-  const [form, setForm] = useState({
-    vehicle_id: "",
-    odometer_km: "",
-    bill_number: "",
-    supplier_name: "",
-    amount: "",
-    remarks: "",
-  });
+  const [vehicleFilter, setVehicleFilter] = useState("");
+  const [supplierFilter, setSupplierFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const sessionData = loadSession();
-    if (!sessionData) {
+    const s = loadSession();
+    if (!s) {
       router.replace("/login");
       return;
     }
-    setSession(sessionData);
+    setSession(s);
+    loadVehicles();
+    loadMaintenance();
   }, [router]);
 
-  useEffect(() => {
-    if (!session) return;
-    fetchVehicles({ page: 1, pageSize: 200, isActive: true }).then((res) =>
-      setVehicles(res.vehicles || []),
-    );
-  }, [session]);
+  async function loadVehicles() {
+    const res = await fetchVehicles({ page: 1, pageSize: 200 });
+    setVehicles(res.vehicles || []);
+  }
 
   async function loadMaintenance() {
-    const filterPayload: Record<string, unknown> = {
-      vehicle_id: filters.vehicle_id || undefined,
-      date_from: filters.date_from || undefined,
-      date_to: filters.date_to || undefined,
-      odometer_min: filters.odometer_min ? Number(filters.odometer_min) : undefined,
-      odometer_max: filters.odometer_max ? Number(filters.odometer_max) : undefined,
-      supplier: filters.supplier || undefined,
-      amount_min: filters.amount_min ? Number(filters.amount_min) : undefined,
-      amount_max: filters.amount_max ? Number(filters.amount_max) : undefined,
-    };
-    const data = await fetchMaintenance({ filters: filterPayload, page: 1, pageSize: 50 });
-    if (data.error) setError(data.error);
-    setItems(data.maintenance || []);
+    setLoading(true);
+    const filters: any = {};
+    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    if (supplierFilter) filters.supplier = supplierFilter;
+
+    const res = await fetchMaintenance({ filters, page: 1, pageSize: 100 });
+    setMaintenance(res.maintenance || []);
+    setLoading(false);
   }
 
-  useEffect(() => {
-    if (!session) return;
-    loadMaintenance();
-  }, [session, filters]);
-
-  async function handleCreate() {
-    setError(null);
-    const payload = {
-      vehicle_id: form.vehicle_id,
-      odometer_km: Number(form.odometer_km),
-      bill_number: form.bill_number,
-      supplier_name: form.supplier_name,
-      amount: Number(form.amount),
-      remarks: form.remarks,
-    };
-    const res = await createMaintenance(payload);
-    if (res.error) {
-      setError(res.error);
-      return;
-    }
-    setForm({
-      vehicle_id: "",
-      odometer_km: "",
-      bill_number: "",
-      supplier_name: "",
-      amount: "",
-      remarks: "",
-    });
-    loadMaintenance();
-  }
-
-  const totalAmount = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-
-  const exportUrl = useMemo(
-    () =>
-      buildExportUrl({
-        type: "maintenance",
-        format: "xlsx",
-        filters: {
-          vehicle_id: filters.vehicle_id || undefined,
-          date_from: filters.date_from || undefined,
-          date_to: filters.date_to || undefined,
-          odometer_min: filters.odometer_min ? Number(filters.odometer_min) : undefined,
-          odometer_max: filters.odometer_max ? Number(filters.odometer_max) : undefined,
-          supplier: filters.supplier || undefined,
-          amount_min: filters.amount_min ? Number(filters.amount_min) : undefined,
-          amount_max: filters.amount_max ? Number(filters.amount_max) : undefined,
-        },
-      }),
-    [filters],
-  );
-
-  async function downloadExport() {
-    const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
-    if (!res.ok) {
-      setError("Export failed");
-      return;
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "maintenance.xlsx";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
+  if (!session) return null;
 
   return (
     <MobileShell title="Maintenance">
-      <div className="space-y-4">
-        {error ? <Toast message={error} tone="error" /> : null}
-        <div className="rounded-lg border bg-white p-3">
-          <div className="text-sm font-semibold text-slate-900">New Maintenance</div>
-          <div className="space-y-3 pt-2">
-            <label className="block text-sm">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Vehicle</span>
-              <select
-                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base"
-                value={form.vehicle_id}
-                onChange={(e) => setForm({ ...form, vehicle_id: e.target.value })}
-                required
-              >
-                <option value="">Select vehicle</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.vehicle_code}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <FormField
-              label="Odometer (km)"
-              value={form.odometer_km}
-              onChange={(e) => setForm({ ...form, odometer_km: e.target.value })}
-              required
-            />
-            <FormField
-              label="Bill Number"
-              value={form.bill_number}
-              onChange={(e) => setForm({ ...form, bill_number: e.target.value })}
-              required
-            />
-            <FormField
-              label="Supplier"
-              value={form.supplier_name}
-              onChange={(e) => setForm({ ...form, supplier_name: e.target.value })}
-              required
-            />
-            <FormField
-              label="Amount"
-              value={form.amount}
-              onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              required
-            />
-            <FormField
-              label="Remarks"
-              value={form.remarks}
-              onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-              required
-            />
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="h-12 w-full rounded-md bg-emerald-600 text-base font-semibold text-white"
-            >
-              Save Maintenance
-            </button>
-          </div>
-        </div>
+      <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white p-4 pb-24">
+        {/* Quick Add Button */}
+        <button
+          onClick={() => router.push("/maintenance/new")}
+          className="mb-4 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-4 text-lg font-bold text-white shadow-lg hover:shadow-xl"
+        >
+          + New Maintenance
+        </button>
 
-        <div className="rounded-lg border bg-white p-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-slate-900">Filters</div>
-            <button
-              type="button"
-              onClick={downloadExport}
-              className="h-9 rounded-md bg-slate-900 px-3 text-sm font-semibold text-white"
-            >
-              Export
-            </button>
-          </div>
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <label className="block text-sm">
-              <span className="mb-1 block text-sm font-medium text-slate-700">Vehicle</span>
-              <select
-                className="h-11 w-full rounded-md border border-slate-300 px-3 text-base"
-                value={filters.vehicle_id}
-                onChange={(e) => setFilters({ ...filters, vehicle_id: e.target.value })}
-              >
-                <option value="">All vehicles</option>
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.vehicle_code}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <FormField
-              label="Date From"
+        {/* Filters */}
+        <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
+          <h3 className="font-bold text-slate-900">Filters</h3>
+          <select
+            value={vehicleFilter}
+            onChange={(e) => setVehicleFilter(e.target.value)}
+            className="w-full rounded-lg border-2 px-3 py-2 text-sm"
+          >
+            <option value="">All Vehicles</option>
+            {vehicles.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.vehicle_code} - {v.brand} {v.model}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={supplierFilter}
+            onChange={(e) => setSupplierFilter(e.target.value)}
+            placeholder="Filter by supplier..."
+            className="w-full rounded-lg border-2 px-3 py-2 text-sm"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <input
               type="date"
-              value={filters.date_from}
-              onChange={(e) => setFilters({ ...filters, date_from: e.target.value })}
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border-2 px-3 py-2 text-sm"
             />
-            <FormField
-              label="Date To"
+            <input
               type="date"
-              value={filters.date_to}
-              onChange={(e) => setFilters({ ...filters, date_to: e.target.value })}
-            />
-            <FormField
-              label="Odometer Min"
-              value={filters.odometer_min}
-              onChange={(e) => setFilters({ ...filters, odometer_min: e.target.value })}
-            />
-            <FormField
-              label="Odometer Max"
-              value={filters.odometer_max}
-              onChange={(e) => setFilters({ ...filters, odometer_max: e.target.value })}
-            />
-            <FormField
-              label="Supplier"
-              value={filters.supplier}
-              onChange={(e) => setFilters({ ...filters, supplier: e.target.value })}
-            />
-            <FormField
-              label="Amount Min"
-              value={filters.amount_min}
-              onChange={(e) => setFilters({ ...filters, amount_min: e.target.value })}
-            />
-            <FormField
-              label="Amount Max"
-              value={filters.amount_max}
-              onChange={(e) => setFilters({ ...filters, amount_max: e.target.value })}
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border-2 px-3 py-2 text-sm"
             />
           </div>
+          <button
+            onClick={loadMaintenance}
+            className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white"
+          >
+            Apply Filters
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <StatCard label="Total on page" value={totalAmount.toFixed(2)} />
-          <StatCard label="Entries" value={String(items.length)} />
-        </div>
-
-        <DataTable
-          columns={[
-            { key: "created_at", label: "Date", render: (row) => new Date(row.created_at).toLocaleDateString() },
-            { key: "supplier_name", label: "Supplier" },
-            { key: "amount", label: "Amount" },
-          ]}
-          rows={items}
-          renderExpanded={(row) => (
-            <div className="space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Bill</span>
-                <span className="text-slate-900">{row.bill_number}</span>
+        {/* List */}
+        {loading ? (
+          <div className="py-12 text-center text-slate-400">Loading...</div>
+        ) : maintenance.length === 0 ? (
+          <div className="rounded-xl bg-white p-8 text-center shadow">
+            <p className="text-slate-500">No maintenance records found</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {maintenance.map((item: any) => (
+              <div key={item.id} className="rounded-xl border-2 border-emerald-100 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="font-bold text-slate-900">
+                      {item.vehicles?.vehicle_code || "Unknown Vehicle"}
+                    </div>
+                    <div className="text-sm text-slate-600">
+                      {new Date(item.created_at).toLocaleDateString()} • {item.odometer_km} km
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      {item.supplier_name} • Bill: {item.bill_number}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-emerald-600">₹{item.amount?.toLocaleString()}</div>
+                  </div>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">{item.remarks}</div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Odometer</span>
-                <span className="text-slate-900">{row.odometer_km}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Remarks</span>
-                <span className="text-slate-900">{row.remarks}</span>
-              </div>
-            </div>
-          )}
-        />
+            ))}
+          </div>
+        )}
       </div>
     </MobileShell>
   );
