@@ -27,7 +27,7 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from("inspections")
-    .select("*", { count: "exact" });
+    .select("*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)", { count: "exact" });
 
   if (filters.vehicle_id) query = query.eq("vehicle_id", filters.vehicle_id);
   if (filters.date_from) query = query.gte("created_at", filters.date_from);

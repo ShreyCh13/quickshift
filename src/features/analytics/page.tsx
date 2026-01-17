@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
                 <option value="">All Vehicles</option>
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.vehicle_code} - {v.brand} {v.model}
+                    {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
                   </option>
                 ))}
               </select>
@@ -252,6 +252,7 @@ export default function AnalyticsPage() {
                         <div key={item.id} className="rounded-md border border-blue-100 p-3 text-sm">
                           <div className="font-semibold text-slate-900">
                             {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
+                            {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                           </div>
                           <div className="text-slate-600">
                             {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
@@ -277,6 +278,7 @@ export default function AnalyticsPage() {
                         <div key={item.id} className="rounded-md border border-emerald-100 p-3 text-sm">
                           <div className="font-semibold text-slate-900">
                             {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
+                            {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                           </div>
                           <div className="text-slate-600">
                             {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km

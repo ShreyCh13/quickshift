@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   const supplier = filters.supplier as string | undefined;
   const type = (filters.type as string | undefined) || "all";
 
-  let vehiclesQuery = supabase.from("vehicles").select("id, vehicle_code, brand, model").eq("is_active", true);
+  let vehiclesQuery = supabase.from("vehicles").select("id, vehicle_code, plate_number, brand, model");
   if (brand) vehiclesQuery = vehiclesQuery.eq("brand", brand);
   if (vehicleId) vehiclesQuery = vehiclesQuery.eq("id", vehicleId);
   const { data: vehicles, error: vehiclesError } = await vehiclesQuery;
@@ -39,12 +39,12 @@ export async function GET(req: Request) {
 
   let maintenanceQuery = supabase
     .from("maintenance")
-    .select("id, vehicle_id, created_at, odometer_km, bill_number, supplier_name, amount, remarks, vehicles(vehicle_code, brand, model)");
+    .select("id, vehicle_id, created_at, odometer_km, bill_number, supplier_name, amount, remarks, vehicles(vehicle_code, plate_number, brand, model)");
   let inspectionsQuery = supabase
     .from("inspections")
-    .select("id, vehicle_id, created_at, odometer_km, driver_name, remarks_json, vehicles(vehicle_code, brand, model)");
+    .select("id, vehicle_id, created_at, odometer_km, driver_name, remarks_json, vehicles(vehicle_code, plate_number, brand, model)");
 
-  if (ids.length > 0) {
+  if (ids.length > 0 && (brand || vehicleId)) {
     maintenanceQuery = maintenanceQuery.in("vehicle_id", ids);
     inspectionsQuery = inspectionsQuery.in("vehicle_id", ids);
   }
@@ -85,10 +85,16 @@ export async function GET(req: Request) {
 
   const vehicleData: Record<
     string,
-    { maintenance_count: number; inspection_count: number; total: number; vehicle_code: string }
+    { maintenance_count: number; inspection_count: number; total: number; vehicle_code: string; plate_number: string | null }
   > = {};
   (vehicles || []).forEach((v) => {
-    vehicleData[v.id] = { maintenance_count: 0, inspection_count: 0, total: 0, vehicle_code: v.vehicle_code };
+    vehicleData[v.id] = {
+      maintenance_count: 0,
+      inspection_count: 0,
+      total: 0,
+      vehicle_code: v.vehicle_code,
+      plate_number: v.plate_number || null,
+    };
   });
   maintenance.forEach((m) => {
     if (vehicleData[m.vehicle_id]) {

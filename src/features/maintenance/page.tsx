@@ -88,7 +88,7 @@ export default function MaintenancePage() {
             <option value="">All Vehicles</option>
             {vehicles.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.vehicle_code} - {v.brand} {v.model}
+                {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
               </option>
             ))}
           </select>
@@ -142,7 +142,8 @@ export default function MaintenancePage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="font-bold text-slate-900">
-                        Vehicle ID: {item.vehicle_id?.substring(0, 8) || "Unknown"}
+                        {item.vehicles?.vehicle_code || `Vehicle ID: ${item.vehicle_id?.substring(0, 8)}`}
+                        {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                       </div>
                       <div className="text-sm text-slate-600">
                         {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
