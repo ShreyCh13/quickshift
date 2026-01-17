@@ -50,6 +50,10 @@ export default function InspectionsPage() {
     if (dateTo) filters.date_to = dateTo;
 
     const res = await fetchInspections({ filters, page: 1, pageSize: 100 });
+    console.log("Inspections API response:", res);
+    if (res.error) {
+      console.error("API error:", res.error);
+    }
     setInspections(res.inspections || []);
     setLoading(false);
   }

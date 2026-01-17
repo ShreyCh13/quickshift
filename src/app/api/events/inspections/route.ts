@@ -45,8 +45,9 @@ export async function GET(req: Request) {
     .range(from, to);
   if (error) {
     console.error("Failed to load inspections:", error);
-    return NextResponse.json({ error: "Failed to load inspections" }, { status: 500 });
+    return NextResponse.json({ error: error.message || "Failed to load inspections", details: error }, { status: 500 });
   }
+  console.log("Loaded inspections:", data?.length || 0, "total:", count);
   return NextResponse.json({ inspections: data, total: count || 0 });
 }
 
