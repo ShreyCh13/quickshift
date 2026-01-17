@@ -170,8 +170,10 @@ export default function InspectionsPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {inspections.map((item: any) => (
-              <div key={item.id} className="rounded-xl border-2 border-blue-100 bg-white shadow-sm">
+            {inspections.map((item: any) => {
+              const canEdit = isAdmin || item.created_by === session?.user.id;
+              return (
+                <div key={item.id} className="rounded-xl border-2 border-blue-100 bg-white shadow-sm">
                 <button
                   onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
                   className="w-full p-4 text-left"
@@ -194,10 +196,7 @@ export default function InspectionsPage() {
                 {expandedId === item.id && (
                   <div className="border-t border-blue-100 bg-blue-50 p-4">
                     <h4 className="mb-2 font-semibold text-slate-900">Inspection Details:</h4>
-                    {(() => {
-                      const canEdit = isAdmin || item.created_by === session?.user.id;
-                      if (canEdit && editId === item.id) {
-                        return (
+                    {canEdit && editId === item.id ? (
                       <div className="space-y-3">
                         <input
                           className="w-full rounded-md border px-3 py-2 text-sm"
@@ -252,11 +251,8 @@ export default function InspectionsPage() {
                           </button>
                         </div>
                       </div>
-                      </div>
-                        );
-                      }
-                      return (
-                        <>
+                    ) : (
+                      <>
                         <div className="space-y-1 text-sm">
                           {Object.entries(item.remarks_json || {}).map(([key, value]) => (
                             <div key={key} className="flex justify-between">
@@ -291,12 +287,12 @@ export default function InspectionsPage() {
                           </div>
                         )}
                       </>
-                      );
-                    })()}
+                    )}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

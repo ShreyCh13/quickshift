@@ -175,8 +175,10 @@ export default function MaintenancePage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {maintenance.map((item: any) => (
-              <div key={item.id} className="rounded-xl border-2 border-emerald-100 bg-white shadow-sm">
+            {maintenance.map((item: any) => {
+              const canEdit = isAdmin || item.created_by === session?.user.id;
+              return (
+                <div key={item.id} className="rounded-xl border-2 border-emerald-100 bg-white shadow-sm">
                 <button
                   onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
                   className="w-full p-4 text-left"
@@ -203,11 +205,8 @@ export default function MaintenancePage() {
 
                 {expandedId === item.id && (
                   <div className="border-t border-emerald-100 bg-emerald-50 p-4">
-                    {(() => {
-                      const canEdit = isAdmin || item.created_by === session?.user.id;
-                      if (canEdit && editId === item.id) {
-                        return (
-                          <div className="space-y-3">
+                    {canEdit && editId === item.id ? (
+                      <div className="space-y-3">
                         <input
                           className="w-full rounded-md border px-3 py-2 text-sm"
                           value={String(editDraft.odometer_km || "")}
@@ -258,11 +257,8 @@ export default function MaintenancePage() {
                           </button>
                         </div>
                       </div>
-                          </div>
-                        );
-                      }
-                      return (
-                        <>
+                    ) : (
+                      <>
                         <div className="mb-2 text-xs text-slate-500">Remarks:</div>
                         <div className="mb-3 text-sm text-slate-700">{item.remarks}</div>
                         {canEdit && (
@@ -293,12 +289,12 @@ export default function MaintenancePage() {
                           </div>
                         )}
                       </>
-                      );
-                    })()}
+                    )}
                   </div>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
