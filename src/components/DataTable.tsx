@@ -26,7 +26,7 @@ export default function DataTable<T extends { id: string }>({
           <summary className="grid cursor-pointer grid-cols-2 gap-2 px-3 py-3 text-sm">
             {columns.slice(0, 2).map((col) => (
               <span key={String(col.key)} className="font-medium text-slate-900">
-                {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key])}
+                {col.render ? col.render(row) : String((row as Record<string, unknown>)[String(col.key)])}
               </span>
             ))}
           </summary>
@@ -35,7 +35,7 @@ export default function DataTable<T extends { id: string }>({
               <div key={String(col.key)} className="flex items-center justify-between py-1">
                 <span className="text-slate-500">{col.label}</span>
                 <span className="text-slate-900">
-                  {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key])}
+                  {col.render ? col.render(row) : String((row as Record<string, unknown>)[String(col.key)])}
                 </span>
               </div>
             ))}

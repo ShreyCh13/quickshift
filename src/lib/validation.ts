@@ -43,7 +43,7 @@ export const inspectionCreateSchema = z.object({
   vehicle_id: z.string().uuid(),
   odometer_km: z.number().int(),
   driver_name: z.string().optional().nullable(),
-  remarks_json: z.record(z.string().min(1)),
+  remarks_json: z.record(z.string(), z.string().min(1)),
 });
 
 export const maintenanceCreateSchema = z.object({
@@ -74,7 +74,7 @@ export const inspectionsFilterSchema = z.object({
   date_to: z.string().optional(),
   odometer_min: z.number().int().optional(),
   odometer_max: z.number().int().optional(),
-  remarks: z.record(z.string().min(1)).optional(),
+  remarks: z.record(z.string(), z.string().min(1)).optional(),
 });
 
 export const maintenanceFilterSchema = z.object({

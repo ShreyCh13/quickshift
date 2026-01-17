@@ -106,8 +106,11 @@ export async function GET(req: Request) {
 
   const wb = rowsToWorkbook(type, rows);
   const buffer = workbookToBuffer(wb);
-  const body = new Uint8Array(buffer);
-  return new NextResponse(body, {
+  const blob = new Blob([buffer], { 
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+  });
+  
+  return new Response(blob, {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${type}.xlsx"`,

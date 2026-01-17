@@ -81,7 +81,7 @@ export function clearSession() {
   window.localStorage.removeItem(SESSION_STORAGE_KEY);
 }
 
-export function getSessionHeader() {
+export function getSessionHeader(): Record<string, string> {
   const session = loadSession();
   if (!session) return {};
   return { "x-qs-session": JSON.stringify(session) };
