@@ -15,10 +15,9 @@ create table if not exists public.users (
 create table if not exists public.vehicles (
   id uuid primary key default gen_random_uuid(),
   vehicle_code text not null unique,
-  make text null,
+  brand text null,
   model text null,
   year int null,
-  plate_number text null,
   notes text null,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -26,6 +25,7 @@ create table if not exists public.vehicles (
 );
 
 create index if not exists vehicles_is_active_idx on public.vehicles (is_active);
+create index if not exists vehicles_brand_idx on public.vehicles (brand);
 
 create table if not exists public.remark_fields (
   id uuid primary key default gen_random_uuid(),

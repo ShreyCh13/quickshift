@@ -49,7 +49,7 @@ export async function GET(req: Request) {
     let query = supabase.from("vehicles").select("*");
     if (filters?.search) {
       const term = `%${String(filters.search)}%`;
-      query = query.or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+      query = query.or(`vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
     }
     if (filters?.is_active === true) query = query.eq("is_active", true);
     if (filters?.is_active === false) query = query.eq("is_active", false);

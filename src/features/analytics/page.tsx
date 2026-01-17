@@ -17,6 +17,7 @@ export default function AnalyticsPage() {
 
   // Filters
   const [vehicleFilter, setVehicleFilter] = useState("");
+  const [brandFilter, setBrandFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "inspections" | "maintenance">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -59,6 +60,22 @@ export default function AnalyticsPage() {
           <h3 className="mb-4 text-lg font-bold text-slate-900">Filters</h3>
           <div className="space-y-3">
             <label className="block">
+              <span className="mb-1 block text-sm font-semibold text-slate-700">Brand</span>
+              <select
+                value={brandFilter}
+                onChange={(e) => setBrandFilter(e.target.value)}
+                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
+              >
+                <option value="">All Brands</option>
+                {Array.from(new Set(vehicles.map((v) => v.brand).filter(Boolean))).map((brand) => (
+                  <option key={brand} value={brand || ""}>
+                    {brand}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Vehicle</span>
               <select
                 value={vehicleFilter}
@@ -68,7 +85,7 @@ export default function AnalyticsPage() {
                 <option value="">All Vehicles</option>
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.vehicle_code} - {v.model}
+                    {v.vehicle_code} - {v.brand} {v.model}
                   </option>
                 ))}
               </select>

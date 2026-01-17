@@ -42,12 +42,10 @@ export async function POST(req: Request) {
     }
     const payload = {
       vehicle_code,
-      make: row.make || row.Make ? String(row.make || row.Make) : null,
+      brand: row.brand || row.Brand ? String(row.brand || row.Brand) : null,
       model: row.model || row.Model || row["Type of Vehicles"] ? 
         String(row.model || row.Model || row["Type of Vehicles"]) : null,
       year: row.year || row.Year ? Number(row.year || row.Year) : null,
-      plate_number: row.plate_number || row.plate_number || row["Plate Number"] ? 
-        String(row.plate_number || row.plate_number || row["Plate Number"]) : null,
       notes: row.notes || row.Notes ? String(row.notes || row.Notes) : null,
       is_active: true,
     };

@@ -48,7 +48,7 @@ export default function Home() {
                 <option value="">Choose vehicle...</option>
                 {vehicles.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {v.vehicle_code} - {v.plate_number || v.model}
+                    {v.vehicle_code} - {v.brand} {v.model}
                   </option>
                 ))}
               </select>

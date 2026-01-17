@@ -145,7 +145,7 @@ export default function InspectionsPage() {
                 <option value="">Select vehicle</option>
                 {vehicles.map((vehicle) => (
                   <option key={vehicle.id} value={vehicle.id}>
-                    {vehicle.vehicle_code} ({vehicle.plate_number || "No plate"})
+                    {vehicle.vehicle_code} - {vehicle.brand} {vehicle.model}
                   </option>
                 ))}
               </select>

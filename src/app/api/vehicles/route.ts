@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   let query = supabase.from("vehicles").select("*", { count: "exact" });
   if (typeof search === "string" && search.trim()) {
     const term = `%${search.trim()}%`;
-    query = query.or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+    query = query.or(`vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
   }
   if (isActive === "true") query = query.eq("is_active", true);
   if (isActive === "false") query = query.eq("is_active", false);

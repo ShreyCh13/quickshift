@@ -25,10 +25,9 @@ export type UserRow = {
 export type VehicleRow = {
   id: string;
   vehicle_code: string;
-  make: string | null;
+  brand: string | null;
   model: string | null;
   year: number | null;
-  plate_number: string | null;
   notes: string | null;
   is_active: boolean;
   created_at: string;
