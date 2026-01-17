@@ -22,11 +22,11 @@ export const userUpdateSchema = z.object({
 
 export const vehicleSchema = z.object({
   id: z.string().uuid().optional(),
-  vehicle_code: z.string().min(1),
-  brand: z.string().optional().nullable(),
-  model: z.string().optional().nullable(),
-  year: z.number().int().optional().nullable(),
-  notes: z.string().optional().nullable(),
+  vehicle_code: z.string().min(1).max(50),
+  brand: z.string().max(100).optional().nullable(),
+  model: z.string().max(100).optional().nullable(),
+  year: z.number().int().min(1900).max(new Date().getFullYear() + 1).optional().nullable(),
+  notes: z.string().max(1000).optional().nullable(),
   is_active: z.boolean().optional(),
 });
 
@@ -40,18 +40,18 @@ export const remarkFieldSchema = z.object({
 
 export const inspectionCreateSchema = z.object({
   vehicle_id: z.string().uuid(),
-  odometer_km: z.number().int(),
-  driver_name: z.string().optional().nullable(),
-  remarks_json: z.record(z.string(), z.string().min(1)),
+  odometer_km: z.number().int().min(0),
+  driver_name: z.string().max(200).optional().nullable(),
+  remarks_json: z.record(z.string(), z.string().min(1).max(500)),
 });
 
 export const maintenanceCreateSchema = z.object({
   vehicle_id: z.string().uuid(),
-  odometer_km: z.number().int(),
-  bill_number: z.string().min(1),
-  supplier_name: z.string().min(1),
-  amount: z.number(),
-  remarks: z.string().min(1),
+  odometer_km: z.number().int().min(0),
+  bill_number: z.string().min(1).max(100),
+  supplier_name: z.string().min(1).max(200),
+  amount: z.number().min(0),
+  remarks: z.string().min(1).max(5000),
 });
 
 export const inspectionUpdateSchema = inspectionCreateSchema.extend({

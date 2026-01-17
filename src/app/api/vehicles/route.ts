@@ -11,12 +11,12 @@ export async function GET(req: Request) {
   const search = url.searchParams.get("search");
   const isActive = url.searchParams.get("isActive");
   const page = Number(url.searchParams.get("page") || "1");
-  const pageSize = Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT);
+  const pageSize = Math.min(Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT), 200);
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
   const supabase = getSupabaseAdmin();
-  let query = supabase.from("vehicles").select("*", { count: "exact" });
+  let query = supabase.from("vehicles").select("id, vehicle_code, brand, model, year, notes, is_active, created_at, updated_at", { count: "exact" });
   if (typeof search === "string" && search.trim()) {
     const term = `%${search.trim()}%`;
     query = query.or(`vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
@@ -27,7 +27,10 @@ export async function GET(req: Request) {
   const { data, error, count } = await query
     .order("vehicle_code", { ascending: true })
     .range(from, to);
-  if (error) return NextResponse.json({ error: "Failed to load vehicles" }, { status: 500 });
+  if (error) {
+    console.error("Failed to load vehicles:", error);
+    return NextResponse.json({ error: "Failed to load vehicles" }, { status: 500 });
+  }
   return NextResponse.json({ vehicles: data, total: count || 0 });
 }
 
@@ -45,9 +48,13 @@ export async function POST(req: Request) {
       .insert(input)
       .select("*")
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to create vehicle:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ vehicle: data });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse vehicle create:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }
@@ -69,9 +76,13 @@ export async function PUT(req: Request) {
       .eq("id", id)
       .select("*")
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to update vehicle:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ vehicle: data });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse vehicle update:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }
@@ -88,13 +99,20 @@ export async function DELETE(req: Request) {
     const supabase = getSupabaseAdmin();
     if (soft !== false) {
       const { error } = await supabase.from("vehicles").update({ is_active: false }).eq("id", id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      if (error) {
+        console.error("Failed to soft delete vehicle:", error);
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
       return NextResponse.json({ success: true, soft: true });
     }
     const { error } = await supabase.from("vehicles").delete().eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to hard delete vehicle:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: true, soft: false });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse vehicle delete:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }

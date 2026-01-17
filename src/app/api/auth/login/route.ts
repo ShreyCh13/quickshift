@@ -15,7 +15,12 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle();
 
-    if (error || !data || data.password !== input.password) {
+    if (error) {
+      console.error("Failed to query user:", error);
+      return NextResponse.json({ error: "Login failed" }, { status: 500 });
+    }
+
+    if (!data || data.password !== input.password) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
@@ -29,6 +34,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
+    console.error("Login error:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }

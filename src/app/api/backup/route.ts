@@ -33,27 +33,37 @@ export async function POST(req: Request) {
   ]);
 
   if (vehicles.error || inspections.error || maintenance.error) {
+    console.error("Failed to fetch backup data:", { 
+      vehiclesError: vehicles.error, 
+      inspectionsError: inspections.error, 
+      maintenanceError: maintenance.error 
+    });
     return NextResponse.json({ error: "Failed to fetch export data" }, { status: 500 });
   }
 
   const date = dateKey();
-  const uploads = await Promise.all([
-    uploadToS3({
-      key: `backups/${date}/vehicles.csv`,
-      body: rowsToCsv(vehicles.data || []),
-      contentType: "text/csv",
-    }),
-    uploadToS3({
-      key: `backups/${date}/inspections.csv`,
-      body: rowsToCsv(inspections.data || []),
-      contentType: "text/csv",
-    }),
-    uploadToS3({
-      key: `backups/${date}/maintenance.csv`,
-      body: rowsToCsv(maintenance.data || []),
-      contentType: "text/csv",
-    }),
-  ]);
+  try {
+    const uploads = await Promise.all([
+      uploadToS3({
+        key: `backups/${date}/vehicles.csv`,
+        body: rowsToCsv(vehicles.data || []),
+        contentType: "text/csv",
+      }),
+      uploadToS3({
+        key: `backups/${date}/inspections.csv`,
+        body: rowsToCsv(inspections.data || []),
+        contentType: "text/csv",
+      }),
+      uploadToS3({
+        key: `backups/${date}/maintenance.csv`,
+        body: rowsToCsv(maintenance.data || []),
+        contentType: "text/csv",
+      }),
+    ]);
 
-  return NextResponse.json({ success: true, uploads });
+    return NextResponse.json({ success: true, uploads });
+  } catch (err) {
+    console.error("Failed to upload backups:", err);
+    return NextResponse.json({ error: "Failed to upload backups" }, { status: 500 });
+  }
 }

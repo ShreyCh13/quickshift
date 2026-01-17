@@ -6,23 +6,6 @@ export function parseSessionFromRequest(req: Request): Session | null {
   if (headerSession) {
     return parseSessionJson(headerSession);
   }
-
-  const authHeader = req.headers.get("authorization");
-  if (authHeader?.toLowerCase().startsWith("bearer ")) {
-    const token = authHeader.slice(7).trim();
-    const decoded = safeBase64Decode(token);
-    if (decoded) {
-      return parseSessionJson(decoded);
-    }
-  }
-
-  const cookie = req.headers.get("cookie") || "";
-  const cookieMatch = cookie.match(/qs_session=([^;]+)/);
-  if (cookieMatch?.[1]) {
-    const decoded = decodeURIComponent(cookieMatch[1]);
-    return parseSessionJson(decoded);
-  }
-
   return null;
 }
 
@@ -51,13 +34,6 @@ function parseSessionJson(raw: string): Session | null {
   }
 }
 
-function safeBase64Decode(value: string) {
-  try {
-    return Buffer.from(value, "base64").toString("utf8");
-  } catch {
-    return null;
-  }
-}
 
 export function loadSession(): Session | null {
   if (typeof window === "undefined") return null;

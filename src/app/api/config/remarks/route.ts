@@ -12,7 +12,10 @@ export async function GET(req: Request) {
   let query = supabase.from("remark_fields").select("*");
   if (activeOnly) query = query.eq("is_active", true);
   const { data, error } = await query.order("sort_order", { ascending: true });
-  if (error) return NextResponse.json({ error: "Failed to load remark fields" }, { status: 500 });
+  if (error) {
+    console.error("Failed to load remark fields:", error);
+    return NextResponse.json({ error: "Failed to load remark fields" }, { status: 500 });
+  }
   return NextResponse.json({ remarkFields: data });
 }
 
@@ -26,9 +29,13 @@ export async function POST(req: Request) {
     const input = remarkFieldSchema.parse(await req.json());
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase.from("remark_fields").insert(input).select("*").single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to create remark field:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ remarkField: data });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse remark field create:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }
@@ -50,9 +57,13 @@ export async function PUT(req: Request) {
       .eq("id", id)
       .select("*")
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to update remark field:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ remarkField: data });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse remark field update:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }
@@ -68,9 +79,13 @@ export async function DELETE(req: Request) {
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
     const { error } = await supabase.from("remark_fields").delete().eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to delete remark field:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse remark field delete:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }

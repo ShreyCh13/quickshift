@@ -46,7 +46,7 @@ export async function GET(req: Request) {
   let rows: Record<string, unknown>[] = [];
 
   if (type === "vehicles") {
-    let query = supabase.from("vehicles").select("*");
+    let query = supabase.from("vehicles").select("id, vehicle_code, brand, model, year, notes, is_active, created_at, updated_at");
     if (filters?.search) {
       const term = `%${String(filters.search)}%`;
       query = query.or(`vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
@@ -54,7 +54,10 @@ export async function GET(req: Request) {
     if (filters?.is_active === true) query = query.eq("is_active", true);
     if (filters?.is_active === false) query = query.eq("is_active", false);
     const { data, error } = await query.order("vehicle_code", { ascending: true });
-    if (error) return NextResponse.json({ error: "Failed to export vehicles" }, { status: 500 });
+    if (error) {
+      console.error("Failed to export vehicles:", error);
+      return NextResponse.json({ error: "Failed to export vehicles" }, { status: 500 });
+    }
     rows = data || [];
   }
 
@@ -73,7 +76,10 @@ export async function GET(req: Request) {
       });
     }
     const { data, error } = await query.order("created_at", { ascending: false });
-    if (error) return NextResponse.json({ error: "Failed to export inspections" }, { status: 500 });
+    if (error) {
+      console.error("Failed to export inspections:", error);
+      return NextResponse.json({ error: "Failed to export inspections" }, { status: 500 });
+    }
     rows = data || [];
   }
 
@@ -90,7 +96,10 @@ export async function GET(req: Request) {
     if (f.amount_min !== undefined) query = query.gte("amount", f.amount_min);
     if (f.amount_max !== undefined) query = query.lte("amount", f.amount_max);
     const { data, error } = await query.order("created_at", { ascending: false });
-    if (error) return NextResponse.json({ error: "Failed to export maintenance" }, { status: 500 });
+    if (error) {
+      console.error("Failed to export maintenance:", error);
+      return NextResponse.json({ error: "Failed to export maintenance" }, { status: 500 });
+    }
     rows = data || [];
   }
 

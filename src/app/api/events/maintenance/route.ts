@@ -31,7 +31,8 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from("maintenance")
-    .select("*, vehicles(vehicle_code, brand, model), users(display_name)", { count: "exact" });
+    .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, amount, remarks, created_by, vehicles(vehicle_code, brand, model), users(display_name)", { count: "exact" })
+;
 
   if (filters.vehicle_id) query = query.eq("vehicle_id", filters.vehicle_id);
   if (filters.date_from) query = query.gte("created_at", filters.date_from);
@@ -45,7 +46,10 @@ export async function GET(req: Request) {
   const { data, error, count } = await query
     .order("created_at", { ascending: false })
     .range(from, to);
-  if (error) return NextResponse.json({ error: "Failed to load maintenance" }, { status: 500 });
+  if (error) {
+    console.error("Failed to load maintenance:", error);
+    return NextResponse.json({ error: "Failed to load maintenance" }, { status: 500 });
+  }
   return NextResponse.json({ maintenance: data, total: count || 0 });
 }
 
@@ -86,13 +90,17 @@ export async function PUT(req: Request) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("maintenance")
-      .update(updates)
+      .update({ ...updates, updated_by: session.user.id })
       .eq("id", id)
       .select("*")
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to update maintenance:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ maintenance: data });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse maintenance update:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }
@@ -107,10 +115,19 @@ export async function DELETE(req: Request) {
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("maintenance").delete().eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Soft delete
+    const { error } = await supabase
+      .from("maintenance")
+      .delete()
+      .eq("id", id)
+;
+    if (error) {
+      console.error("Failed to delete maintenance:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse maintenance delete:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }

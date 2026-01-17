@@ -47,22 +47,28 @@ export type InspectionRow = {
   id: string;
   vehicle_id: string;
   created_at: string;
+  updated_at: string;
   odometer_km: number;
   driver_name: string | null;
   remarks_json: Record<string, string>;
   created_by: string;
+  updated_by: string | null;
+  is_deleted: boolean;
 };
 
 export type MaintenanceRow = {
   id: string;
   vehicle_id: string;
   created_at: string;
+  updated_at: string;
   odometer_km: number;
   bill_number: string;
   supplier_name: string;
   amount: string;
   remarks: string;
   created_by: string;
+  updated_by: string | null;
+  is_deleted: boolean;
 };
 
 export type VehiclesImportResult = {

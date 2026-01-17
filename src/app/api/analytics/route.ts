@@ -8,22 +8,25 @@ export async function GET(req: Request) {
 
   const supabase = getSupabaseAdmin();
 
-  // Fetch all data
+  // Fetch all data (only non-deleted records)
   const [
     { data: maintenance, error: maintenanceError },
-    { data: inspections },
-    { data: vehicles },
+    { data: inspections, error: inspectionsError },
+    { data: vehicles, error: vehiclesError },
     { count: totalInspections },
     { count: totalMaintenance },
   ] = await Promise.all([
     supabase.from("maintenance").select("amount, supplier_name, vehicle_id, created_at"),
     supabase.from("inspections").select("vehicle_id, created_at"),
-    supabase.from("vehicles").select("id, vehicle_code"),
+    supabase.from("vehicles").select("id, vehicle_code").eq("is_active", true),
     supabase.from("inspections").select("*", { count: "exact", head: true }),
     supabase.from("maintenance").select("*", { count: "exact", head: true }),
   ]);
 
-  if (maintenanceError) return NextResponse.json({ error: "Failed to load analytics" }, { status: 500 });
+  if (maintenanceError || inspectionsError || vehiclesError) {
+    console.error("Failed to load analytics:", { maintenanceError, inspectionsError, vehiclesError });
+    return NextResponse.json({ error: "Failed to load analytics" }, { status: 500 });
+  }
 
   // Monthly totals
   const monthlyTotals: Record<string, number> = {};

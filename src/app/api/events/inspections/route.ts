@@ -43,7 +43,10 @@ export async function GET(req: Request) {
   const { data, error, count } = await query
     .order("created_at", { ascending: false })
     .range(from, to);
-  if (error) return NextResponse.json({ error: "Failed to load inspections" }, { status: 500 });
+  if (error) {
+    console.error("Failed to load inspections:", error);
+    return NextResponse.json({ error: "Failed to load inspections" }, { status: 500 });
+  }
   return NextResponse.json({ inspections: data, total: count || 0 });
 }
 
@@ -97,13 +100,17 @@ export async function PUT(req: Request) {
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("inspections")
-      .update(updates)
+      .update({ ...updates, updated_by: session.user.id })
       .eq("id", id)
       .select("*")
       .single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      console.error("Failed to update inspection:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ inspection: data });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse inspection update:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }
@@ -118,10 +125,19 @@ export async function DELETE(req: Request) {
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
-    const { error } = await supabase.from("inspections").delete().eq("id", id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    // Soft delete
+    const { error } = await supabase
+      .from("inspections")
+      .delete()
+      .eq("id", id)
+;
+    if (error) {
+      console.error("Failed to delete inspection:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (err) {
+    console.error("Failed to parse inspection delete:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }
 }

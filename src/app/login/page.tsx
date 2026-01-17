@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/users?seedCheck=1").catch(() => null);
+    fetch("/api/seed", { method: "POST" }).catch(() => null);
   }, []);
 
   async function onSubmit(e: React.FormEvent) {
