@@ -29,9 +29,18 @@ export async function GET(req: Request) {
   const filters = parseFilters(url.searchParams.get("filters"));
 
   const supabase = getSupabaseAdmin();
-  let query = supabase
-    .from("maintenance")
-    .select("*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)", { count: "exact" });
+  async function runQuery(includePlate: boolean) {
+    return supabase
+      .from("maintenance")
+      .select(
+        includePlate
+          ? "*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)"
+          : "*, vehicles(vehicle_code, brand, model), users(display_name)",
+        { count: "exact" },
+      );
+  }
+
+  let query = await runQuery(true);
 
   if (filters.vehicle_id) {
     query = query.eq("vehicle_id", filters.vehicle_id);
@@ -58,9 +67,14 @@ export async function GET(req: Request) {
   if (filters.amount_min !== undefined) query = query.gte("amount", filters.amount_min);
   if (filters.amount_max !== undefined) query = query.lte("amount", filters.amount_max);
 
-  const { data, error, count } = await query
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  let { data, error, count } = await query.order("created_at", { ascending: false }).range(from, to);
+  if (error && error.message?.includes("column vehicles.plate_number")) {
+    query = await runQuery(false);
+    const fallback = await query.order("created_at", { ascending: false }).range(from, to);
+    data = fallback.data;
+    error = fallback.error;
+    count = fallback.count;
+  }
   if (error) {
     console.error("Failed to load maintenance:", error);
     return NextResponse.json({ error: "Failed to load maintenance" }, { status: 500 });

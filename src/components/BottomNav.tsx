@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { loadSession } from "@/lib/auth";
+import { clearSession, loadSession } from "@/lib/auth";
 
 export default function BottomNav() {
+  const router = useRouter();
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
 
@@ -23,6 +24,12 @@ export default function BottomNav() {
 
   if (isAdmin) {
     navItems.push({ href: "/admin", label: "Admin", icon: "⚙️", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100" });
+  }
+
+  function handleLogout() {
+    fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+    clearSession();
+    router.replace("/login");
   }
 
   return (
@@ -43,6 +50,14 @@ export default function BottomNav() {
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex min-w-0 flex-1 flex-col items-center justify-center px-2 py-3 text-red-600 hover:bg-red-50"
+        >
+          <span className="text-2xl">🚪</span>
+          <span className="mt-1 text-xs">Logout</span>
+        </button>
       </div>
     </nav>
   );

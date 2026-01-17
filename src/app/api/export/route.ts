@@ -77,6 +77,15 @@ export async function GET(req: Request) {
       const ids = (vehicles || []).map((v) => v.id);
       if (ids.length === 0) return NextResponse.json({ inspections: [], total: 0 });
       query = query.in("vehicle_id", ids);
+    } else if (f.brand) {
+      const { data: vehicles, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("brand", f.brand);
+      if (vehicleError) return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
+      const ids = (vehicles || []).map((v) => v.id);
+      if (ids.length === 0) return NextResponse.json({ inspections: [], total: 0 });
+      query = query.in("vehicle_id", ids);
     }
     if (f.date_from) query = query.gte("created_at", f.date_from);
     if (f.date_to) query = query.lte("created_at", f.date_to);
@@ -107,6 +116,15 @@ export async function GET(req: Request) {
         .from("vehicles")
         .select("id")
         .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+      if (vehicleError) return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
+      const ids = (vehicles || []).map((v) => v.id);
+      if (ids.length === 0) return NextResponse.json({ maintenance: [], total: 0 });
+      query = query.in("vehicle_id", ids);
+    } else if (f.brand) {
+      const { data: vehicles, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("brand", f.brand);
       if (vehicleError) return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
       const ids = (vehicles || []).map((v) => v.id);
       if (ids.length === 0) return NextResponse.json({ maintenance: [], total: 0 });

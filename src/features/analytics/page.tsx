@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
-import { loadSession } from "@/lib/auth";
+import { getSessionHeader, loadSession } from "@/lib/auth";
 import type { Session, VehicleRow } from "@/lib/types";
-import { fetchAnalytics } from "./api";
+import { buildExportUrl, fetchAnalytics } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
 
 export default function AnalyticsPage() {
@@ -51,6 +51,41 @@ export default function AnalyticsPage() {
     });
     setData(result);
     setLoading(false);
+  }
+
+  function getExportFilters(type: "inspections" | "maintenance") {
+    const filters: Record<string, unknown> = {};
+    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (brandFilter) filters.brand = brandFilter;
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    if (type === "maintenance" && supplierFilter) filters.supplier = supplierFilter;
+    return filters;
+  }
+
+  async function handleExport() {
+    const exportTypes: Array<"inspections" | "maintenance"> =
+      typeFilter === "all" ? ["inspections", "maintenance"] : [typeFilter];
+    for (const exportType of exportTypes) {
+      const filters = getExportFilters(exportType);
+      const exportUrl = buildExportUrl({
+        type: exportType,
+        format: "xlsx",
+        filters: Object.keys(filters).length ? filters : undefined,
+      });
+      const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
+      if (!res.ok) {
+        alert("Export failed");
+        return;
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = `${exportType}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 
   if (!session) return null;
@@ -149,12 +184,21 @@ export default function AnalyticsPage() {
               />
             </label>
 
-            <button
-              type="submit"
-              className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700"
-            >
-              Apply Filters
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="submit"
+                className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700"
+              >
+                Apply Filters
+              </button>
+              <button
+                type="button"
+                onClick={handleExport}
+                className="w-full rounded-lg bg-slate-900 py-2.5 font-semibold text-white hover:bg-slate-800"
+              >
+                Export
+              </button>
+            </div>
           </div>
         </form>
 

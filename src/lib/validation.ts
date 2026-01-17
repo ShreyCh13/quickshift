@@ -71,6 +71,7 @@ export const paginationSchema = z.object({
 export const inspectionsFilterSchema = z.object({
   vehicle_id: z.string().uuid().optional(),
   vehicle_query: z.string().optional(),
+  brand: z.string().optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
   odometer_min: z.number().int().optional(),
@@ -81,6 +82,7 @@ export const inspectionsFilterSchema = z.object({
 export const maintenanceFilterSchema = z.object({
   vehicle_id: z.string().uuid().optional(),
   vehicle_query: z.string().optional(),
+  brand: z.string().optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
   odometer_min: z.number().int().optional(),

@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("users")
-    .select("id, username, display_name, role, created_at")
+    .select("id, username, password, display_name, role, created_at")
     .order("created_at", { ascending: false });
   if (error) {
     console.error("Failed to load users:", error);

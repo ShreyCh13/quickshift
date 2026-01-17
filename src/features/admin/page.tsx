@@ -41,14 +41,21 @@ export default function AdminPage() {
   const [newRemark, setNewRemark] = useState({
     key: "",
     label: "",
-    sort_order: "",
     is_active: true,
   });
+  const [draggingRemarkId, setDraggingRemarkId] = useState<string | null>(null);
+  const [dragOverRemarkId, setDragOverRemarkId] = useState<string | null>(null);
+  const [isSavingRemarkOrder, setIsSavingRemarkOrder] = useState(false);
+  const [remarkOrderDirty, setRemarkOrderDirty] = useState(false);
 
   function startUserEdit(user: UserRow) {
     setUserEdits((prev) => ({
       ...prev,
-      [user.id]: { display_name: user.display_name, role: user.role, password: "" },
+      [user.id]: {
+        display_name: user.display_name,
+        role: user.role,
+        password: user.password ?? "",
+      },
     }));
   }
 
@@ -84,6 +91,7 @@ export default function AdminPage() {
     const [userRes, remarkRes] = await Promise.all([fetchUsers(), fetchRemarkFields()]);
     setUsers(userRes.users || []);
     setRemarkFields(remarkRes.remarkFields || []);
+    setRemarkOrderDirty(false);
   }
 
   useEffect(() => {
@@ -107,15 +115,58 @@ export default function AdminPage() {
     const res = await createRemarkField({
       key: newRemark.key,
       label: newRemark.label,
-      sort_order: newRemark.sort_order ? Number(newRemark.sort_order) : 0,
+      sort_order: remarkFields.length
+        ? Math.max(...remarkFields.map((field) => field.sort_order || 0)) + 1
+        : 1,
       is_active: newRemark.is_active,
     });
     if (res.error) {
       setError(res.error);
       return;
     }
-    setNewRemark({ key: "", label: "", sort_order: "", is_active: true });
+    setNewRemark({ key: "", label: "", is_active: true });
     loadAdminData();
+  }
+
+  function moveRemarkField(sourceId: string, targetId: string) {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setRemarkFields((prev) => {
+      const fromIndex = prev.findIndex((field) => field.id === sourceId);
+      const toIndex = prev.findIndex((field) => field.id === targetId);
+      if (fromIndex === -1 || toIndex === -1) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      const reordered = next.map((field, index) => ({
+        ...field,
+        sort_order: index + 1,
+      }));
+      return reordered;
+    });
+    setRemarkOrderDirty(true);
+  }
+
+  async function handleSaveRemarkOrder() {
+    setError(null);
+    setIsSavingRemarkOrder(true);
+    const results = await Promise.all(
+      remarkFields.map((field) =>
+        updateRemarkField({
+          id: field.id,
+          key: field.key,
+          label: field.label,
+          sort_order: field.sort_order,
+          is_active: field.is_active,
+        }),
+      ),
+    );
+    const failed = results.find((res) => res.error);
+    if (failed?.error) {
+      setError(failed.error);
+    } else {
+      await loadAdminData();
+    }
+    setIsSavingRemarkOrder(false);
   }
 
   const exportVehicles = useMemo(() => buildExportUrl({ type: "vehicles", format: "xlsx" }), []);
@@ -207,6 +258,7 @@ export default function AdminPage() {
             <div className="space-y-2">
               {users.map((user) => {
                 const editing = userEdits[user.id];
+                const passwordValue = editing ? editing.password : user.password ?? "";
                 return (
                 <div key={user.id} className="rounded-md border p-2">
                   <div className="text-sm font-semibold">{user.username}</div>
@@ -226,15 +278,14 @@ export default function AdminPage() {
                       <option value="admin">Admin</option>
                       <option value="staff">Staff</option>
                     </select>
-                    {editing && (
-                      <input
-                        type="password"
-                        className="col-span-2 h-10 rounded-md border px-2 text-sm"
-                        placeholder="New password"
-                        value={editing.password}
-                        onChange={(e) => updateUserEdit(user.id, { password: e.target.value })}
-                      />
-                    )}
+                    <input
+                      type="text"
+                      className="col-span-2 h-10 rounded-md border px-2 text-sm"
+                      placeholder="Password"
+                      value={passwordValue}
+                      disabled={!editing}
+                      onChange={(e) => updateUserEdit(user.id, { password: e.target.value })}
+                    />
                   </div>
                   <div className="mt-2 flex gap-2">
                     {editing ? (
@@ -329,10 +380,63 @@ export default function AdminPage() {
 
         {activeSection === "remarks" && (
           <AdminSection title="Remark Fields">
+            <div className="flex items-center justify-between rounded-md border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <span>Drag cards to reorder remarks.</span>
+              <button
+                type="button"
+                onClick={handleSaveRemarkOrder}
+                disabled={!remarkOrderDirty || isSavingRemarkOrder}
+                className={`h-8 rounded-md px-3 text-xs font-semibold text-white ${
+                  remarkOrderDirty && !isSavingRemarkOrder ? "bg-slate-900" : "cursor-not-allowed bg-slate-300"
+                }`}
+              >
+                {isSavingRemarkOrder ? "Saving..." : "Save Order"}
+              </button>
+            </div>
             <div className="space-y-2">
               {remarkFields.map((field) => (
-                <div key={field.id} className="rounded-md border p-2">
-                  <div className="text-sm font-semibold">{field.key}</div>
+                <div
+                  key={field.id}
+                  draggable
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData("text/remark", field.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    setDraggingRemarkId(field.id);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    if (dragOverRemarkId !== field.id) {
+                      setDragOverRemarkId(field.id);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (dragOverRemarkId === field.id) {
+                      setDragOverRemarkId(null);
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const sourceId = event.dataTransfer.getData("text/remark");
+                    moveRemarkField(sourceId, field.id);
+                    setDraggingRemarkId(null);
+                    setDragOverRemarkId(null);
+                  }}
+                  onDragEnd={() => {
+                    setDraggingRemarkId(null);
+                    setDragOverRemarkId(null);
+                  }}
+                  className={`rounded-md border p-2 transition ${
+                    draggingRemarkId === field.id
+                      ? "border-slate-300 bg-slate-50 opacity-70"
+                      : dragOverRemarkId === field.id
+                        ? "border-slate-900 bg-slate-50"
+                        : "bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between text-sm font-semibold">
+                    <span>{field.key}</span>
+                    <span className="rounded bg-slate-100 px-2 py-1 text-xs text-slate-500">Drag</span>
+                  </div>
                   <div className="mt-2 grid grid-cols-2 gap-2">
                     <input
                       className="h-10 rounded-md border px-2 text-sm"
@@ -343,17 +447,9 @@ export default function AdminPage() {
                         )
                       }
                     />
-                    <input
-                      className="h-10 rounded-md border px-2 text-sm"
-                      value={field.sort_order}
-                      onChange={(e) =>
-                        setRemarkFields((prev) =>
-                          prev.map((f) =>
-                            f.id === field.id ? { ...f, sort_order: Number(e.target.value) } : f,
-                          ),
-                        )
-                      }
-                    />
+                    <div className="flex h-10 items-center rounded-md border border-dashed px-2 text-xs text-slate-500">
+                      Order: {field.sort_order}
+                    </div>
                   </div>
                   <div className="mt-2 flex items-center gap-2 text-sm">
                     <label className="flex items-center gap-2">
@@ -408,11 +504,6 @@ export default function AdminPage() {
                 label="Label"
                 value={newRemark.label}
                 onChange={(e) => setNewRemark({ ...newRemark, label: e.target.value })}
-              />
-              <FormField
-                label="Sort Order"
-                value={newRemark.sort_order}
-                onChange={(e) => setNewRemark({ ...newRemark, sort_order: e.target.value })}
               />
               <label className="flex items-center gap-2 text-sm">
                 <input
