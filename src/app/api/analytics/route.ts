@@ -7,41 +7,84 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getSupabaseAdmin();
-  const { data: maintenance, error } = await supabase
-    .from("maintenance")
-    .select("amount, supplier_name, vehicle_id, created_at");
-  if (error) return NextResponse.json({ error: "Failed to load analytics" }, { status: 500 });
 
+  // Fetch all data
+  const [
+    { data: maintenance, error: maintenanceError },
+    { data: inspections },
+    { data: vehicles },
+    { count: totalInspections },
+    { count: totalMaintenance },
+  ] = await Promise.all([
+    supabase.from("maintenance").select("amount, supplier_name, vehicle_id, created_at"),
+    supabase.from("inspections").select("vehicle_id, created_at"),
+    supabase.from("vehicles").select("id, vehicle_code"),
+    supabase.from("inspections").select("*", { count: "exact", head: true }),
+    supabase.from("maintenance").select("*", { count: "exact", head: true }),
+  ]);
+
+  if (maintenanceError) return NextResponse.json({ error: "Failed to load analytics" }, { status: 500 });
+
+  // Monthly totals
   const monthlyTotals: Record<string, number> = {};
-  const bySupplier: Record<string, number> = {};
-  const byVehicle: Record<string, number> = {};
-
   maintenance?.forEach((row) => {
-    const created = new Date(row.created_at);
-    const monthKey = `${created.getUTCFullYear()}-${String(created.getUTCMonth() + 1).padStart(2, "0")}`;
-    const amount = Number(row.amount || 0);
-    monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + amount;
-    if (row.supplier_name) {
-      bySupplier[row.supplier_name] = (bySupplier[row.supplier_name] || 0) + amount;
-    }
-    if (row.vehicle_id) {
-      byVehicle[row.vehicle_id] = (byVehicle[row.vehicle_id] || 0) + amount;
+    const date = new Date(row.created_at);
+    const monthKey = date.toLocaleString("default", { month: "short", year: "numeric" });
+    monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + Number(row.amount || 0);
+  });
+
+  // Supplier aggregation
+  const supplierData: Record<string, { total: number; count: number }> = {};
+  maintenance?.forEach((row) => {
+    const supplier = row.supplier_name;
+    if (!supplierData[supplier]) supplierData[supplier] = { total: 0, count: 0 };
+    supplierData[supplier].total += Number(row.amount || 0);
+    supplierData[supplier].count += 1;
+  });
+
+  // Vehicle aggregation
+  const vehicleData: Record<
+    string,
+    { maintenance_count: number; inspection_count: number; total: number; vehicle_code: string }
+  > = {};
+
+  vehicles?.forEach((v) => {
+    vehicleData[v.id] = { maintenance_count: 0, inspection_count: 0, total: 0, vehicle_code: v.vehicle_code };
+  });
+
+  maintenance?.forEach((m) => {
+    if (vehicleData[m.vehicle_id]) {
+      vehicleData[m.vehicle_id].maintenance_count += 1;
+      vehicleData[m.vehicle_id].total += Number(m.amount || 0);
     }
   });
 
-  const topSuppliers = Object.entries(bySupplier)
-    .map(([name, total]) => ({ name, total }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 10);
-
-  const topVehicles = Object.entries(byVehicle)
-    .map(([vehicle_id, total]) => ({ vehicle_id, total }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 10);
+  inspections?.forEach((i) => {
+    if (vehicleData[i.vehicle_id]) {
+      vehicleData[i.vehicle_id].inspection_count += 1;
+    }
+  });
 
   const monthly = Object.entries(monthlyTotals)
     .map(([month, total]) => ({ month, total }))
-    .sort((a, b) => (a.month > b.month ? 1 : -1));
+    .sort((a, b) => (a.month > b.month ? -1 : 1))
+    .slice(0, 12);
 
-  return NextResponse.json({ monthly, topSuppliers, topVehicles });
+  const topSuppliers = Object.entries(supplierData)
+    .map(([supplier, data]) => ({ supplier, total: data.total, count: data.count }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+
+  const topVehicles = Object.values(vehicleData)
+    .filter((v) => v.total > 0 || v.inspection_count > 0)
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 10);
+
+  return NextResponse.json({
+    monthly,
+    topSuppliers,
+    topVehicles,
+    totalInspections: totalInspections || 0,
+    totalMaintenance: totalMaintenance || 0,
+  });
 }
