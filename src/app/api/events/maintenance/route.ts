@@ -41,6 +41,9 @@ export async function GET(req: Request) {
   }
 
   let query = await runQuery(true);
+  
+  // Filter out soft-deleted records
+  query = query.eq("is_deleted", false);
 
   if (filters.vehicle_id) {
     query = query.eq("vehicle_id", filters.vehicle_id);
@@ -154,12 +157,11 @@ export async function DELETE(req: Request) {
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
-    // Soft delete
+    // Soft delete - mark as deleted instead of removing
     const { error } = await supabase
       .from("maintenance")
-      .delete()
-      .eq("id", id)
-;
+      .update({ is_deleted: true, updated_by: session.user.id })
+      .eq("id", id);
     if (error) {
       console.error("Failed to delete maintenance:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });

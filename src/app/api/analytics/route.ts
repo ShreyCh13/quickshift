@@ -60,9 +60,19 @@ export async function GET(req: Request) {
     maintenanceQuery = maintenanceQuery.ilike("supplier_name", `%${supplier}%`);
   }
 
+  // Add soft-delete filter and limit to prevent memory issues with large datasets
+  const ANALYTICS_LIMIT = 1000;
+  
+  maintenanceQuery = maintenanceQuery.eq("is_deleted", false);
+  inspectionsQuery = inspectionsQuery.eq("is_deleted", false);
+
   const [maintenanceRes, inspectionsRes] = await Promise.all([
-    type === "inspections" ? Promise.resolve({ data: [] }) : maintenanceQuery.order("created_at", { ascending: false }),
-    type === "maintenance" ? Promise.resolve({ data: [] }) : inspectionsQuery.order("created_at", { ascending: false }),
+    type === "inspections" 
+      ? Promise.resolve({ data: [] }) 
+      : maintenanceQuery.order("created_at", { ascending: false }).limit(ANALYTICS_LIMIT),
+    type === "maintenance" 
+      ? Promise.resolve({ data: [] }) 
+      : inspectionsQuery.order("created_at", { ascending: false }).limit(ANALYTICS_LIMIT),
   ]);
 
   const maintenance = maintenanceRes.data || [];

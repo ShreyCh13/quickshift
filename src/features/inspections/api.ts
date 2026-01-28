@@ -1,25 +1,15 @@
 import { getSessionHeader } from "@/lib/auth";
+import { buildExportUrl, buildQueryParams } from "@/lib/api-utils";
 
-function toBase64(value: string) {
-  if (typeof window === "undefined") {
-    return Buffer.from(value).toString("base64");
-  }
-  return btoa(unescape(encodeURIComponent(value)));
-}
+export { buildExportUrl };
 
 export async function fetchInspections(params: {
   filters?: Record<string, unknown>;
   page?: number;
   pageSize?: number;
 }) {
-  const query = new URLSearchParams();
-  if (params.page) query.set("page", String(params.page));
-  if (params.pageSize) query.set("pageSize", String(params.pageSize));
-  if (params.filters) {
-    const raw = JSON.stringify(params.filters);
-    query.set("filters", toBase64(raw));
-  }
-  const res = await fetch(`/api/events/inspections?${query.toString()}`, {
+  const query = buildQueryParams(params);
+  const res = await fetch(`/api/events/inspections?${query}`, {
     headers: { ...getSessionHeader() },
   });
   return res.json();
@@ -50,19 +40,4 @@ export async function deleteInspection(id: string) {
     body: JSON.stringify({ id }),
   });
   return res.json();
-}
-
-export function buildExportUrl(params: {
-  type: "inspections";
-  format: "xlsx" | "csv";
-  filters?: Record<string, unknown>;
-}) {
-  const query = new URLSearchParams();
-  query.set("type", params.type);
-  query.set("format", params.format);
-  if (params.filters) {
-    const raw = JSON.stringify(params.filters);
-    query.set("filters", toBase64(raw));
-  }
-  return `/api/export?${query.toString()}`;
 }

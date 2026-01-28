@@ -65,7 +65,7 @@ export type MaintenanceRow = {
   odometer_km: number;
   bill_number: string;
   supplier_name: string;
-  amount: string;
+  amount: number;
   remarks: string;
   created_by: string;
   updated_by: string | null;

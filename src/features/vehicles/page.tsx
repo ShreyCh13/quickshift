@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { clearSession, loadSession } from "@/lib/auth";
@@ -14,9 +14,16 @@ export default function VehiclesPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [total, setTotal] = useState(0);
+  const PAGE_SIZE = 20;
 
   const [newVehicle, setNewVehicle] = useState({
     vehicle_code: "",
@@ -37,15 +44,34 @@ export default function VehiclesPage() {
     setSession(sessionData);
   }, [router]);
 
-  async function loadVehicles() {
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Reset and reload when search changes
+  useEffect(() => {
+    if (session) {
+      setPage(1);
+      loadVehicles(1, true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session, debouncedSearch]);
+
+  const loadVehicles = useCallback(async (pageNum: number = 1, reset: boolean = false) => {
     setLoading(true);
-    const data = await fetchVehicles({ search, page: 1, pageSize: 200 });
+    const data = await fetchVehicles({ search: debouncedSearch, page: pageNum, pageSize: PAGE_SIZE });
+    
     if (!data || typeof data !== "object") {
       setError("Failed to load vehicles: Empty response");
       setVehicles([]);
       setLoading(false);
       return;
     }
+    
     if ("error" in data && data.error) {
       if (data.error === "Unauthorized") {
         clearSession();
@@ -56,15 +82,27 @@ export default function VehiclesPage() {
       setVehicles([]);
     } else {
       setError(null);
-      setVehicles("vehicles" in data && Array.isArray(data.vehicles) ? data.vehicles : []);
+      const newVehicles = "vehicles" in data && Array.isArray(data.vehicles) ? data.vehicles : [];
+      
+      if (reset) {
+        setVehicles(newVehicles);
+      } else {
+        setVehicles(prev => [...prev, ...newVehicles]);
+      }
+      
+      setTotal("total" in data ? (data.total as number) : 0);
+      setHasMore(newVehicles.length === PAGE_SIZE);
     }
+    
+    setPage(pageNum);
     setLoading(false);
-  }
+  }, [debouncedSearch, router]);
 
-  useEffect(() => {
-    if (!session) return;
-    loadVehicles();
-  }, [session, search]);
+  function handleLoadMore() {
+    if (!loading && hasMore) {
+      loadVehicles(page + 1, false);
+    }
+  }
 
   async function handleCreate() {
     if (!newVehicle.vehicle_code.trim()) {
@@ -94,7 +132,7 @@ export default function VehiclesPage() {
     }
     setNewVehicle({ vehicle_code: "", brand: "", model: "", year: "", notes: "" });
     setShowAddForm(false);
-    loadVehicles();
+    loadVehicles(1, true);
   }
 
   async function handleDelete(id: string, code: string) {
@@ -105,18 +143,18 @@ export default function VehiclesPage() {
       setError(res.error);
       return;
     }
-    loadVehicles();
+    loadVehicles(1, true);
   }
 
   return (
     <MobileShell title="Vehicles">
-      <div className="space-y-4 p-4">
+      <div className="space-y-4 p-4 pb-24">
         {error && (
           <div className="space-y-2">
             <Toast message={error} tone="error" />
             <button
-              onClick={loadVehicles}
-              className="w-full rounded-lg border-2 border-slate-300 bg-white py-2 text-sm font-semibold text-slate-700"
+              onClick={() => loadVehicles(1, true)}
+              className="w-full rounded-lg border-2 border-slate-300 bg-white py-2 text-sm font-semibold text-slate-700 active:bg-slate-50"
             >
               Retry Load
             </button>
@@ -134,7 +172,7 @@ export default function VehiclesPage() {
         <datalist id="vehicle-search">
           {vehicles.map((v) => (
             <option key={v.id} value={v.vehicle_code}>
-              {v.plate_number ? `${v.plate_number} • ` : ""}{v.brand} {v.model}
+              {v.plate_number ? `${v.plate_number} - ` : ""}{v.brand} {v.model}
             </option>
           ))}
         </datalist>
@@ -142,7 +180,7 @@ export default function VehiclesPage() {
         {isAdmin && (
           <button
             onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-700"
+            className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white active:bg-blue-700"
           >
             {showAddForm ? "Cancel" : "+ Add Vehicle"}
           </button>
@@ -188,7 +226,7 @@ export default function VehiclesPage() {
               />
               <button
                 onClick={handleCreate}
-                className="w-full rounded-lg bg-emerald-600 py-3 font-semibold text-white hover:bg-emerald-700"
+                className="w-full rounded-lg bg-emerald-600 py-3 font-semibold text-white active:bg-emerald-700"
               >
                 Add Vehicle
               </button>
@@ -196,7 +234,14 @@ export default function VehiclesPage() {
           </div>
         )}
 
-        {loading ? (
+        {/* Results count */}
+        {total > 0 && (
+          <div className="text-sm text-slate-500">
+            Showing {vehicles.length} of {total} vehicles
+          </div>
+        )}
+
+        {loading && vehicles.length === 0 ? (
           <div className="py-12 text-center text-slate-400">Loading...</div>
         ) : vehicles.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed bg-slate-50 px-6 py-12 text-center">
@@ -211,7 +256,7 @@ export default function VehiclesPage() {
               <div
                 key={v.id}
                 className={`rounded-xl border-2 bg-white p-4 shadow-sm transition ${
-                  v.is_active ? "border-slate-100 hover:border-blue-300 hover:shadow" : "border-red-200 bg-red-50"
+                  v.is_active ? "border-slate-100 active:border-blue-300" : "border-red-200 bg-red-50"
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -231,18 +276,18 @@ export default function VehiclesPage() {
                       </div>
                     )}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2">
                     {v.is_active && (
                       <>
                         <button
                           onClick={() => router.push(`/inspections/new?vehicle=${v.id}`)}
-                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-blue-700"
+                          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white active:bg-blue-700"
                         >
                           Inspect
                         </button>
                         <button
                           onClick={() => router.push(`/maintenance/new?vehicle=${v.id}`)}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                          className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white active:bg-emerald-700"
                         >
                           Maintain
                         </button>
@@ -251,7 +296,7 @@ export default function VehiclesPage() {
                     {isAdmin && v.is_active && (
                       <button
                         onClick={() => handleDelete(v.id, v.vehicle_code)}
-                        className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700"
+                        className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white active:bg-red-700"
                       >
                         Delete
                       </button>
@@ -260,6 +305,17 @@ export default function VehiclesPage() {
                 </div>
               </div>
             ))}
+
+            {/* Load More Button */}
+            {hasMore && (
+              <button
+                onClick={handleLoadMore}
+                disabled={loading}
+                className="w-full rounded-xl border-2 border-blue-200 bg-white py-3 font-semibold text-blue-600 active:bg-blue-50 disabled:opacity-50"
+              >
+                {loading ? "Loading..." : "Load More"}
+              </button>
+            )}
           </div>
         )}
       </div>

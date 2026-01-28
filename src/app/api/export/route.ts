@@ -44,6 +44,9 @@ export async function GET(req: Request) {
 
   const supabase = getSupabaseAdmin();
   let rows: Record<string, unknown>[] = [];
+  
+  // Limit exports to prevent memory issues and timeouts
+  const EXPORT_LIMIT = 10000;
 
   if (type === "vehicles") {
     let query = supabase.from("vehicles").select("id, vehicle_code, brand, model, year, notes, is_active, created_at, updated_at");
@@ -53,7 +56,7 @@ export async function GET(req: Request) {
     }
     if (filters?.is_active === true) query = query.eq("is_active", true);
     if (filters?.is_active === false) query = query.eq("is_active", false);
-    const { data, error } = await query.order("vehicle_code", { ascending: true });
+    const { data, error } = await query.order("vehicle_code", { ascending: true }).limit(EXPORT_LIMIT);
     if (error) {
       console.error("Failed to export vehicles:", error);
       return NextResponse.json({ error: "Failed to export vehicles" }, { status: 500 });
@@ -64,7 +67,7 @@ export async function GET(req: Request) {
   if (type === "inspections") {
     const parsed = filters ? inspectionsFilterSchema.safeParse(filters) : null;
     const f = parsed?.success ? parsed.data : {};
-    let query = supabase.from("inspections").select("*");
+    let query = supabase.from("inspections").select("*").eq("is_deleted", false);
     if (f.vehicle_id) {
       query = query.eq("vehicle_id", f.vehicle_id);
     } else if (f.vehicle_query) {
@@ -96,7 +99,7 @@ export async function GET(req: Request) {
         query = query.ilike(`remarks_json->>${key}`, `%${value}%`);
       });
     }
-    const { data, error } = await query.order("created_at", { ascending: false });
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(EXPORT_LIMIT);
     if (error) {
       console.error("Failed to export inspections:", error);
       return NextResponse.json({ error: "Failed to export inspections" }, { status: 500 });
@@ -107,7 +110,7 @@ export async function GET(req: Request) {
   if (type === "maintenance") {
     const parsed = filters ? maintenanceFilterSchema.safeParse(filters) : null;
     const f = parsed?.success ? parsed.data : {};
-    let query = supabase.from("maintenance").select("*");
+    let query = supabase.from("maintenance").select("*").eq("is_deleted", false);
     if (f.vehicle_id) {
       query = query.eq("vehicle_id", f.vehicle_id);
     } else if (f.vehicle_query) {
@@ -137,7 +140,7 @@ export async function GET(req: Request) {
     if (f.supplier) query = query.ilike("supplier_name", `%${f.supplier}%`);
     if (f.amount_min !== undefined) query = query.gte("amount", f.amount_min);
     if (f.amount_max !== undefined) query = query.lte("amount", f.amount_max);
-    const { data, error } = await query.order("created_at", { ascending: false });
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(EXPORT_LIMIT);
     if (error) {
       console.error("Failed to export maintenance:", error);
       return NextResponse.json({ error: "Failed to export maintenance" }, { status: 500 });
