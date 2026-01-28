@@ -5,17 +5,27 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import MobileShell from "@/components/MobileShell";
 import { getSessionHeader, loadSession, clearSession } from "@/lib/auth";
-import type { Session, MaintenanceRow } from "@/lib/types";
+import type { Session } from "@/lib/types";
 import { buildExportUrl, updateMaintenance } from "./api";
 import Skeleton from "@/components/Skeleton";
 import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, queryKeys } from "@/hooks/useQueries";
 
-interface MaintenanceItemWithVehicle extends MaintenanceRow {
-  vehicles?: {
+// Type matching what the hook returns (not full MaintenanceRow)
+interface MaintenanceItem {
+  id: string;
+  vehicle_id: string;
+  created_at: string;
+  odometer_km: number;
+  bill_number: string;
+  supplier_name: string;
+  amount: number;
+  remarks: string;
+  created_by?: string;
+  vehicles: {
     vehicle_code: string;
-    plate_number?: string | null;
-    brand?: string | null;
-    model?: string | null;
+    plate_number: string | null;
+    brand: string | null;
+    model: string | null;
   } | null;
 }
 
@@ -65,7 +75,7 @@ export default function MaintenancePage() {
   const deleteMutation = useDeleteMaintenance();
 
   // Flatten paginated data
-  const maintenance: MaintenanceItemWithVehicle[] = data?.pages.flatMap((page) => page.data) ?? [];
+  const maintenance: MaintenanceItem[] = data?.pages.flatMap((page) => page.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
   useEffect(() => {
@@ -147,7 +157,7 @@ export default function MaintenancePage() {
     queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
   }
 
-  function handleStartEdit(item: MaintenanceItemWithVehicle) {
+  function handleStartEdit(item: MaintenanceItem) {
     setEditId(item.id);
     setEditDraft({
       vehicle_id: item.vehicle_id,
