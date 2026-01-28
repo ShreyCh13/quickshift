@@ -30,25 +30,106 @@ export async function POST(req: Request) {
 
   const supabase = getSupabaseAdmin();
   
+  // Helper to get value from row with various column name formats (handles trailing spaces)
+  function getRowValue(row: Record<string, unknown>, ...keys: string[]): string | null {
+    for (const key of keys) {
+      // Check exact match
+      if (row[key] !== undefined && row[key] !== null && row[key] !== "") {
+        return String(row[key]).trim();
+      }
+      // Check with trailing space
+      if (row[key + " "] !== undefined && row[key + " "] !== null && row[key + " "] !== "") {
+        return String(row[key + " "]).trim();
+      }
+      // Check trimmed keys in row
+      for (const rowKey of Object.keys(row)) {
+        if (rowKey.trim().toLowerCase() === key.toLowerCase()) {
+          const val = row[rowKey];
+          if (val !== undefined && val !== null && val !== "") {
+            return String(val).trim();
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  // Helper to parse "Type of Vehicles" which contains "BRAND MODEL" combined
+  function parseBrandModel(typeOfVehicle: string | null): { brand: string | null; model: string | null } {
+    if (!typeOfVehicle) return { brand: null, model: null };
+    
+    // Known brand prefixes to extract
+    const knownBrands = [
+      "TOYOTA", "SUZUKI", "KIA", "MERCEDES", "JAGUAR", "LANDROVER", "LAND ROVER",
+      "RANGE ROVER", "FORCE", "BMW", "AUDI", "HONDA", "HYUNDAI", "MAHINDRA",
+      "TATA", "FORD", "VOLKSWAGEN", "SKODA", "MG", "NISSAN", "RENAULT"
+    ];
+    
+    const upper = typeOfVehicle.toUpperCase();
+    
+    // Try to find a known brand
+    for (const brand of knownBrands) {
+      if (upper.startsWith(brand + " ")) {
+        return {
+          brand: brand,
+          model: typeOfVehicle.substring(brand.length).trim() || null
+        };
+      }
+    }
+    
+    // Special cases
+    if (upper.includes("SEATER")) {
+      // "19 SEATER TEMPO TRAVELLER" -> brand: null, model: full string
+      return { brand: null, model: typeOfVehicle };
+    }
+    
+    // If no brand found, use first word as brand if there are multiple words
+    const parts = typeOfVehicle.split(/\s+/);
+    if (parts.length > 1) {
+      return {
+        brand: parts[0],
+        model: parts.slice(1).join(" ")
+      };
+    }
+    
+    return { brand: null, model: typeOfVehicle };
+  }
+  
   // Parse all rows first
   const parsedRows: Array<{ rowNum: number; payload: any; vehicle_code: string }> = [];
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
-    const vehicle_code = String(
-      row.vehicle_code || row.VehicleCode || row["Vehicle Number"] || row.code || ""
-    ).trim();
+    
+    // Get vehicle code from various possible column names
+    const vehicle_code = getRowValue(row, "vehicle_code", "VehicleCode", "Vehicle Number", "code");
+    
     if (!vehicle_code) {
       result.skipped += 1;
       result.errors.push({ row: i + 2, message: "Missing vehicle_code" });
       continue;
     }
+    
+    // Get brand and model - check for separate columns first, then combined "Type of Vehicles"
+    let brand = getRowValue(row, "brand", "Brand");
+    let model = getRowValue(row, "model", "Model");
+    
+    // If no separate brand/model, try to parse from "Type of Vehicles"
+    if (!brand && !model) {
+      const typeOfVehicle = getRowValue(row, "Type of Vehicles", "TypeOfVehicles", "Vehicle Type");
+      const parsed = parseBrandModel(typeOfVehicle);
+      brand = parsed.brand;
+      model = parsed.model;
+    }
+    
+    const year = getRowValue(row, "year", "Year");
+    const notes = getRowValue(row, "notes", "Notes");
+    
     const payload = {
       vehicle_code,
-      brand: row.brand || row.Brand ? String(row.brand || row.Brand) : null,
-      model: row.model || row.Model || row["Type of Vehicles"] ? 
-        String(row.model || row.Model || row["Type of Vehicles"]) : null,
-      year: row.year || row.Year ? Number(row.year || row.Year) : null,
-      notes: row.notes || row.Notes ? String(row.notes || row.Notes) : null,
+      brand: brand || null,
+      model: model || null,
+      year: year ? Number(year) : null,
+      notes: notes || null,
       is_active: true,
     };
     parsedRows.push({ rowNum: i + 2, payload, vehicle_code });
