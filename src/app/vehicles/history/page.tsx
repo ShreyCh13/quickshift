@@ -194,7 +194,7 @@ export default function VehicleHistoryPage() {
   }
 
   return (
-    <MobileShell title="Vehicle History" backHref="/vehicles">
+    <MobileShell title="Vehicle History">
       <div className="space-y-4 p-4 pb-24">
         {error && <Toast message={error} tone="error" />}
 
