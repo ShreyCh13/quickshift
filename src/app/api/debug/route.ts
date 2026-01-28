@@ -64,7 +64,7 @@ export async function GET(req: Request) {
       hasSession: !!session,
       isValid: sessionValid,
       userId: session?.user?.id || null,
-      userName: session?.user?.display_name || null,
+      userName: session?.user?.displayName || null,
     },
     counts: {
       vehicles: vehicles.count || 0,
