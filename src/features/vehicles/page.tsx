@@ -214,7 +214,7 @@ export default function VehiclesPage() {
         <input
           type="text"
           list="vehicle-search"
-          placeholder="Search vehicle code or plate..."
+          placeholder="Search by code, plate, or name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 text-base focus:border-blue-500 focus:outline-none"

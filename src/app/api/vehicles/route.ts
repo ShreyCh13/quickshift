@@ -17,6 +17,11 @@ export async function GET(req: Request) {
     const to = from + pageSize - 1;
 
     const supabase = getSupabaseAdmin();
+    
+    // Check if search is a valid UUID (for direct ID lookup)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const isUuidSearch = typeof search === "string" && uuidRegex.test(search.trim());
+    
     async function runQuery(includePlate: boolean) {
       let query = supabase
         .from("vehicles")
@@ -27,16 +32,22 @@ export async function GET(req: Request) {
           { count: "exact" },
         );
       if (typeof search === "string" && search.trim()) {
-        const term = `%${search.trim()}%`;
-        query = query.or(
-          includePlate
-            ? `vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`
-            : `vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`,
-        );
+        if (isUuidSearch) {
+          // Direct ID lookup when search is a UUID
+          query = query.eq("id", search.trim());
+        } else {
+          // Text search on vehicle fields
+          const term = `%${search.trim()}%`;
+          query = query.or(
+            includePlate
+              ? `vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`
+              : `vehicle_code.ilike.${term},brand.ilike.${term},model.ilike.${term}`,
+          );
+        }
       }
       if (isActive === "true") query = query.eq("is_active", true);
       if (isActive === "false") query = query.eq("is_active", false);
-      return query.order("vehicle_code", { ascending: true }).range(from, to);
+      return query.order("updated_at", { ascending: false }).range(from, to);
     }
 
     let { data, error, count } = await runQuery(true);

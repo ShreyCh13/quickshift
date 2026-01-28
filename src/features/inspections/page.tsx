@@ -195,7 +195,7 @@ export default function InspectionsPage() {
             type="text"
             value={vehicleSearch}
             onChange={(e) => setVehicleSearch(e.target.value)}
-            placeholder="Search by vehicle code or plate..."
+            placeholder="Search by vehicle code, plate, or name..."
             className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
           />
           <div className="grid grid-cols-2 gap-2">
