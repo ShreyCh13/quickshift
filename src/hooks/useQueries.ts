@@ -105,7 +105,7 @@ async function fetchWithSession<T>(
   return response.json();
 }
 
-function encodeFilters(filters: Record<string, unknown>): string {
+function encodeFilters(filters: object): string {
   return btoa(JSON.stringify(filters));
 }
 
