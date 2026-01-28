@@ -39,7 +39,7 @@ export async function GET(req: Request) {
           : "*, vehicles(vehicle_code, brand, model), users(display_name)",
         { count: "exact" },
       )
-      .eq("is_deleted", false); // Filter out soft-deleted records
+      .or("is_deleted.is.null,is_deleted.eq.false"); // Filter out soft-deleted records (handle NULL for older records)
 
     if (filters.vehicle_id) {
       query = query.eq("vehicle_id", filters.vehicle_id);

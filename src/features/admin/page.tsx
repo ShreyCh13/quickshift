@@ -20,11 +20,10 @@ import {
 } from "./api";
 import { ListSkeleton } from "@/components/Skeleton";
 
-type TabKey = "categories" | "contractors" | "users" | "database";
+type TabKey = "categories" | "users" | "database";
 
 const TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "categories", label: "Categories", icon: "📁" },
-  { key: "contractors", label: "Contractors", icon: "🏢" },
   { key: "users", label: "Users", icon: "👥" },
   { key: "database", label: "Database", icon: "💾" },
 ];
@@ -228,7 +227,7 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="mb-4 rounded-xl bg-white p-2 shadow">
-          <div className="grid grid-cols-4 gap-1">
+          <div className="grid grid-cols-3 gap-1">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
@@ -353,17 +352,6 @@ export default function AdminPage() {
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Contractors Tab */}
-            {activeTab === "contractors" && (
-              <div className="rounded-xl bg-white p-8 text-center shadow">
-                <div className="mb-4 text-4xl">🏗️</div>
-                <h3 className="mb-2 text-lg font-bold text-slate-900">Contractors Coming Soon</h3>
-                <p className="text-sm text-slate-500">
-                  Manage your service contractors and vendors in a future update.
-                </p>
               </div>
             )}
 

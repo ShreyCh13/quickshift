@@ -63,8 +63,8 @@ export async function GET(req: Request) {
   // Add soft-delete filter and limit to prevent memory issues with large datasets
   const ANALYTICS_LIMIT = 1000;
   
-  maintenanceQuery = maintenanceQuery.eq("is_deleted", false);
-  inspectionsQuery = inspectionsQuery.eq("is_deleted", false);
+  maintenanceQuery = maintenanceQuery.or("is_deleted.is.null,is_deleted.eq.false");
+  inspectionsQuery = inspectionsQuery.or("is_deleted.is.null,is_deleted.eq.false");
 
   const [maintenanceRes, inspectionsRes] = await Promise.all([
     type === "inspections" 

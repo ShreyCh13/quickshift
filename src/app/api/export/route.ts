@@ -67,7 +67,7 @@ export async function GET(req: Request) {
   if (type === "inspections") {
     const parsed = filters ? inspectionsFilterSchema.safeParse(filters) : null;
     const f = parsed?.success ? parsed.data : {};
-    let query = supabase.from("inspections").select("*").eq("is_deleted", false);
+    let query = supabase.from("inspections").select("*").or("is_deleted.is.null,is_deleted.eq.false");
     if (f.vehicle_id) {
       query = query.eq("vehicle_id", f.vehicle_id);
     } else if (f.vehicle_query) {
@@ -110,7 +110,7 @@ export async function GET(req: Request) {
   if (type === "maintenance") {
     const parsed = filters ? maintenanceFilterSchema.safeParse(filters) : null;
     const f = parsed?.success ? parsed.data : {};
-    let query = supabase.from("maintenance").select("*").eq("is_deleted", false);
+    let query = supabase.from("maintenance").select("*").or("is_deleted.is.null,is_deleted.eq.false");
     if (f.vehicle_id) {
       query = query.eq("vehicle_id", f.vehicle_id);
     } else if (f.vehicle_query) {
