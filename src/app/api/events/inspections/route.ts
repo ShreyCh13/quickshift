@@ -25,33 +25,6 @@ export async function GET(req: Request) {
   const filters = parseFilters(url.searchParams.get("filters"));
 
   const supabase = getSupabaseAdmin();
-  
-  function buildQuery(includePlate: boolean) {
-    let query = supabase
-      .from("inspections")
-      .select(
-        includePlate
-          ? "*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)"
-          : "*, vehicles(vehicle_code, brand, model), users(display_name)",
-        { count: "exact" },
-      )
-      .or("is_deleted.is.null,is_deleted.eq.false"); // Filter out soft-deleted records (handle NULL for older records)
-
-    if (filters.vehicle_id) {
-      query = query.eq("vehicle_id", filters.vehicle_id);
-    }
-    if (filters.date_from) query = query.gte("created_at", filters.date_from);
-    if (filters.date_to) query = query.lte("created_at", filters.date_to);
-    if (filters.odometer_min !== undefined) query = query.gte("odometer_km", filters.odometer_min);
-    if (filters.odometer_max !== undefined) query = query.lte("odometer_km", filters.odometer_max);
-    if (filters.remarks) {
-      Object.entries(filters.remarks).forEach(([key, value]) => {
-        query = query.ilike(`remarks_json->>${key}`, `%${value}%`);
-      });
-    }
-    
-    return query;
-  }
 
   // Handle vehicle_query filter separately (needs async lookup)
   let vehicleIds: string[] | null = null;
@@ -70,25 +43,49 @@ export async function GET(req: Request) {
     }
   }
 
-  let query = buildQuery(true);
-  if (vehicleIds) {
+  // Build query with filters
+  let query = supabase
+    .from("inspections")
+    .select("*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)", { count: "exact" });
+
+  // Apply filters
+  if (filters.vehicle_id) {
+    query = query.eq("vehicle_id", filters.vehicle_id);
+  } else if (vehicleIds) {
     query = query.in("vehicle_id", vehicleIds);
+  }
+  if (filters.date_from) query = query.gte("created_at", filters.date_from);
+  if (filters.date_to) query = query.lte("created_at", filters.date_to);
+  if (filters.odometer_min !== undefined) query = query.gte("odometer_km", filters.odometer_min);
+  if (filters.odometer_max !== undefined) query = query.lte("odometer_km", filters.odometer_max);
+  if (filters.remarks) {
+    Object.entries(filters.remarks).forEach(([key, value]) => {
+      query = query.ilike(`remarks_json->>${key}`, `%${value}%`);
+    });
   }
 
   let { data, error, count } = await query.order("created_at", { ascending: false }).range(from, to);
-  
+
   // Fallback if plate_number column doesn't exist
   if (error && error.message?.includes("column vehicles.plate_number")) {
-    let fallbackQuery = buildQuery(false);
-    if (vehicleIds) {
+    let fallbackQuery = supabase
+      .from("inspections")
+      .select("*, vehicles(vehicle_code, brand, model), users(display_name)", { count: "exact" });
+
+    if (filters.vehicle_id) {
+      fallbackQuery = fallbackQuery.eq("vehicle_id", filters.vehicle_id);
+    } else if (vehicleIds) {
       fallbackQuery = fallbackQuery.in("vehicle_id", vehicleIds);
     }
+    if (filters.date_from) fallbackQuery = fallbackQuery.gte("created_at", filters.date_from);
+    if (filters.date_to) fallbackQuery = fallbackQuery.lte("created_at", filters.date_to);
+
     const fallback = await fallbackQuery.order("created_at", { ascending: false }).range(from, to);
     data = fallback.data;
     error = fallback.error;
     count = fallback.count;
   }
-  
+
   if (error) {
     console.error("Failed to load inspections:", error);
     return NextResponse.json({ error: error.message || "Failed to load inspections", details: error }, { status: 500 });
@@ -181,10 +178,10 @@ export async function DELETE(req: Request) {
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
-    // Soft delete - mark as deleted instead of removing
+    // Hard delete for now (soft delete requires is_deleted column)
     const { error } = await supabase
       .from("inspections")
-      .update({ is_deleted: true, updated_by: session.user.id })
+      .delete()
       .eq("id", id);
     if (error) {
       console.error("Failed to delete inspection:", error);
