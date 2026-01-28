@@ -5,15 +5,17 @@ import { ReactNode } from "react";
 interface SkeletonProps {
   className?: string;
   children?: ReactNode;
+  style?: React.CSSProperties;
 }
 
 /**
  * Basic skeleton loading element with pulse animation.
  */
-export function Skeleton({ className = "" }: SkeletonProps) {
+export function Skeleton({ className = "", style }: SkeletonProps) {
   return (
     <div
       className={`animate-pulse rounded-md bg-slate-200 ${className}`}
+      style={style}
       aria-hidden="true"
     />
   );
