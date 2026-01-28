@@ -25,25 +25,37 @@ export async function GET(req: Request) {
   const filters = parseFilters(url.searchParams.get("filters"));
 
   const supabase = getSupabaseAdmin();
-  async function runQuery(includePlate: boolean) {
-    return supabase
+  
+  function buildQuery(includePlate: boolean) {
+    let query = supabase
       .from("inspections")
       .select(
         includePlate
           ? "*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)"
           : "*, vehicles(vehicle_code, brand, model), users(display_name)",
         { count: "exact" },
-      );
+      )
+      .eq("is_deleted", false); // Filter out soft-deleted records
+
+    if (filters.vehicle_id) {
+      query = query.eq("vehicle_id", filters.vehicle_id);
+    }
+    if (filters.date_from) query = query.gte("created_at", filters.date_from);
+    if (filters.date_to) query = query.lte("created_at", filters.date_to);
+    if (filters.odometer_min !== undefined) query = query.gte("odometer_km", filters.odometer_min);
+    if (filters.odometer_max !== undefined) query = query.lte("odometer_km", filters.odometer_max);
+    if (filters.remarks) {
+      Object.entries(filters.remarks).forEach(([key, value]) => {
+        query = query.ilike(`remarks_json->>${key}`, `%${value}%`);
+      });
+    }
+    
+    return query;
   }
 
-  let query = await runQuery(true);
-  
-  // Filter out soft-deleted records
-  query = query.eq("is_deleted", false);
-
-  if (filters.vehicle_id) {
-    query = query.eq("vehicle_id", filters.vehicle_id);
-  } else if (filters.vehicle_query) {
+  // Handle vehicle_query filter separately (needs async lookup)
+  let vehicleIds: string[] | null = null;
+  if (!filters.vehicle_id && filters.vehicle_query) {
     const term = `%${filters.vehicle_query}%`;
     const { data: vehicles, error: vehicleError } = await supabase
       .from("vehicles")
@@ -52,35 +64,35 @@ export async function GET(req: Request) {
     if (vehicleError) {
       return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
     }
-    const ids = (vehicles || []).map((v) => v.id);
-    if (ids.length === 0) {
+    vehicleIds = (vehicles || []).map((v) => v.id);
+    if (vehicleIds.length === 0) {
       return NextResponse.json({ inspections: [], total: 0 });
     }
-    query = query.in("vehicle_id", ids);
   }
-  if (filters.date_from) query = query.gte("created_at", filters.date_from);
-  if (filters.date_to) query = query.lte("created_at", filters.date_to);
-  if (filters.odometer_min !== undefined) query = query.gte("odometer_km", filters.odometer_min);
-  if (filters.odometer_max !== undefined) query = query.lte("odometer_km", filters.odometer_max);
-  if (filters.remarks) {
-    Object.entries(filters.remarks).forEach(([key, value]) => {
-      query = query.ilike(`remarks_json->>${key}`, `%${value}%`);
-    });
+
+  let query = buildQuery(true);
+  if (vehicleIds) {
+    query = query.in("vehicle_id", vehicleIds);
   }
 
   let { data, error, count } = await query.order("created_at", { ascending: false }).range(from, to);
+  
+  // Fallback if plate_number column doesn't exist
   if (error && error.message?.includes("column vehicles.plate_number")) {
-    query = await runQuery(false);
-    const fallback = await query.order("created_at", { ascending: false }).range(from, to);
+    let fallbackQuery = buildQuery(false);
+    if (vehicleIds) {
+      fallbackQuery = fallbackQuery.in("vehicle_id", vehicleIds);
+    }
+    const fallback = await fallbackQuery.order("created_at", { ascending: false }).range(from, to);
     data = fallback.data;
     error = fallback.error;
     count = fallback.count;
   }
+  
   if (error) {
     console.error("Failed to load inspections:", error);
     return NextResponse.json({ error: error.message || "Failed to load inspections", details: error }, { status: 500 });
   }
-  console.log("Loaded inspections:", data?.length || 0, "total:", count);
   return NextResponse.json({ inspections: data, total: count || 0 });
 }
 
