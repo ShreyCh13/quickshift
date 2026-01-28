@@ -134,7 +134,11 @@ export function useVehicles(
           plate_number: string | null;
           brand: string | null;
           model: string | null;
+          year: number | null;
+          notes: string | null;
           is_active: boolean;
+          created_at: string;
+          updated_at: string;
         }>;
         total: number;
       }>(`/api/vehicles?${params}`),
@@ -160,7 +164,11 @@ export function useVehiclesInfinite(filters?: VehicleFilters, pageSize = 20) {
           plate_number: string | null;
           brand: string | null;
           model: string | null;
+          year: number | null;
+          notes: string | null;
           is_active: boolean;
+          created_at: string;
+          updated_at: string;
         }>;
         total: number;
         hasMore?: boolean;
