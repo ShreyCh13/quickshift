@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
-import { DEFAULT_REMARK_FIELDS, DEFAULT_USERS } from "@/lib/constants";
 import { requireRole, requireSession } from "@/lib/auth";
 import { userCreateSchema, userUpdateSchema } from "@/lib/validation";
+import { hashPassword, validatePasswordStrength } from "@/lib/password";
 
 export async function GET(req: Request) {
   const session = requireSession(req);
@@ -12,9 +12,10 @@ export async function GET(req: Request) {
   }
 
   const supabase = getSupabaseAdmin();
+  // Don't return passwords to the client - security best practice
   const { data, error } = await supabase
     .from("users")
-    .select("id, username, password, display_name, role, created_at")
+    .select("id, username, display_name, role, created_at")
     .order("created_at", { ascending: false });
   if (error) {
     console.error("Failed to load users:", error);
@@ -31,10 +32,23 @@ export async function POST(req: Request) {
   }
   try {
     const input = userCreateSchema.parse(await req.json());
+    
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(input.password);
+    if (!passwordValidation.valid) {
+      return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
+    }
+    
+    // Hash the password before storing
+    const hashedPassword = await hashPassword(input.password);
+    
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("users")
-      .insert(input)
+      .insert({
+        ...input,
+        password: hashedPassword,
+      })
       .select("id, username, display_name, role, created_at")
       .single();
     if (error) {
@@ -56,7 +70,18 @@ export async function PUT(req: Request) {
   }
   try {
     const input = userUpdateSchema.parse(await req.json());
-    const { id, ...updates } = input;
+    const { id, password, ...otherUpdates } = input;
+    
+    // If password is being updated, validate and hash it
+    let updates: Record<string, unknown> = { ...otherUpdates };
+    if (password) {
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.valid) {
+        return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
+      }
+      updates.password = await hashPassword(password);
+    }
+    
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("users")

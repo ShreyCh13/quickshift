@@ -53,6 +53,7 @@ export default function AdminPage() {
   });
   const [draggingRemarkId, setDraggingRemarkId] = useState<string | null>(null);
   const [dragOverRemarkId, setDragOverRemarkId] = useState<string | null>(null);
+  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
   const [isSavingRemarkOrder, setIsSavingRemarkOrder] = useState(false);
   const [remarkOrderDirty, setRemarkOrderDirty] = useState(false);
 
@@ -462,8 +463,16 @@ export default function AdminPage() {
                             <div className="mt-3 flex gap-2 border-t pt-3">
                               <div className="flex-1 text-center">
                                 <div className="text-xs text-slate-400">Password</div>
-                                <div className="font-mono text-sm text-slate-600">••••••••</div>
+                                <div className="font-mono text-sm text-slate-600">
+                                  {visiblePasswordId === user.id ? (user.password || "—") : "••••••••"}
+                                </div>
                               </div>
+                              <button
+                                onClick={() => setVisiblePasswordId(visiblePasswordId === user.id ? null : user.id)}
+                                className="rounded-lg border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 active:bg-slate-50"
+                              >
+                                {visiblePasswordId === user.id ? "Hide" : "View"}
+                              </button>
                               <button
                                 onClick={() => startUserEdit(user)}
                                 className="rounded-lg border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 active:bg-slate-50"

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import QueryProvider from "@/components/QueryProvider";
 
 export const metadata: Metadata = {
   title: "QuickShift",
@@ -29,7 +30,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-900 antialiased">
-        <ErrorBoundary>{children}</ErrorBoundary>
+        <QueryProvider>
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </QueryProvider>
       </body>
     </html>
   );

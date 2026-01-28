@@ -77,3 +77,15 @@ export const DEFAULT_VEHICLES = [
 ] as const;
 
 export const PAGE_SIZE_DEFAULT = 50;
+export const PAGE_SIZE_MAX = 200;
+
+// Rate limiting constants
+export const RATE_LIMIT_LOGIN_MAX = 5;
+export const RATE_LIMIT_LOGIN_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+export const RATE_LIMIT_API_MAX = 60;
+export const RATE_LIMIT_API_WINDOW_MS = 60 * 1000; // 1 minute
+
+// Cache TTLs (in milliseconds)
+export const CACHE_TTL_VEHICLES = 60 * 1000; // 1 minute
+export const CACHE_TTL_REMARK_FIELDS = 10 * 60 * 1000; // 10 minutes
+export const CACHE_TTL_ANALYTICS = 5 * 60 * 1000; // 5 minutes

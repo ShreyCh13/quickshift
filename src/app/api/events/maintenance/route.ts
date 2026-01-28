@@ -6,7 +6,7 @@ import {
   maintenanceFilterSchema,
   maintenanceUpdateSchema,
 } from "@/lib/validation";
-import { PAGE_SIZE_DEFAULT } from "@/lib/constants";
+import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from "@/lib/constants";
 
 function parseFilters(raw: string | null) {
   if (!raw) return {};
@@ -22,78 +22,96 @@ export async function GET(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const url = new URL(req.url);
-  const page = Number(url.searchParams.get("page") || "1");
-  const pageSize = Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT);
+  const page = Math.max(1, Number(url.searchParams.get("page") || "1"));
+  const pageSize = Math.min(PAGE_SIZE_MAX, Math.max(1, Number(url.searchParams.get("pageSize") || PAGE_SIZE_DEFAULT)));
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
   const filters = parseFilters(url.searchParams.get("filters"));
 
   const supabase = getSupabaseAdmin();
 
-  // Handle vehicle_query filter separately (needs async lookup)
-  let vehicleIds: string[] | null = null;
-  if (!filters.vehicle_id && filters.vehicle_query) {
-    const term = `%${filters.vehicle_query}%`;
-    const { data: vehicles, error: vehicleError } = await supabase
-      .from("vehicles")
-      .select("id")
-      .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
-    if (vehicleError) {
-      return NextResponse.json({ error: "Failed to filter vehicles" }, { status: 500 });
-    }
-    vehicleIds = (vehicles || []).map((v) => v.id);
-    if (vehicleIds.length === 0) {
-      return NextResponse.json({ maintenance: [], total: 0 });
-    }
-  }
-
-  // Build query with filters
-  let query = supabase
-    .from("maintenance")
-    .select("*, vehicles(vehicle_code, plate_number, brand, model), users(display_name)", { count: "exact" });
-
-  // Apply filters
-  if (filters.vehicle_id) {
-    query = query.eq("vehicle_id", filters.vehicle_id);
-  } else if (vehicleIds) {
-    query = query.in("vehicle_id", vehicleIds);
-  }
-  if (filters.date_from) query = query.gte("created_at", filters.date_from);
-  if (filters.date_to) query = query.lte("created_at", filters.date_to);
-  if (filters.odometer_min !== undefined) query = query.gte("odometer_km", filters.odometer_min);
-  if (filters.odometer_max !== undefined) query = query.lte("odometer_km", filters.odometer_max);
-  if (filters.supplier) query = query.ilike("supplier_name", `%${filters.supplier}%`);
-  if (filters.amount_min !== undefined) query = query.gte("amount", filters.amount_min);
-  if (filters.amount_max !== undefined) query = query.lte("amount", filters.amount_max);
-
-  let { data, error, count } = await query.order("created_at", { ascending: false }).range(from, to);
-
-  // Fallback if plate_number column doesn't exist
-  if (error && error.message?.includes("column vehicles.plate_number")) {
-    let fallbackQuery = supabase
+  try {
+    // Build query with specific field selection for performance
+    let query = supabase
       .from("maintenance")
-      .select("*, vehicles(vehicle_code, brand, model), users(display_name)", { count: "exact" });
+      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, amount, remarks, created_by, updated_by, is_deleted", { count: "exact" })
+      .eq("is_deleted", false);
 
+    // Apply filters only if they exist
     if (filters.vehicle_id) {
-      fallbackQuery = fallbackQuery.eq("vehicle_id", filters.vehicle_id);
-    } else if (vehicleIds) {
-      fallbackQuery = fallbackQuery.in("vehicle_id", vehicleIds);
+      query = query.eq("vehicle_id", filters.vehicle_id);
     }
-    if (filters.date_from) fallbackQuery = fallbackQuery.gte("created_at", filters.date_from);
-    if (filters.date_to) fallbackQuery = fallbackQuery.lte("created_at", filters.date_to);
-    if (filters.supplier) fallbackQuery = fallbackQuery.ilike("supplier_name", `%${filters.supplier}%`);
+    if (filters.vehicle_query) {
+      const term = `%${filters.vehicle_query}%`;
+      const { data: vehicles } = await supabase
+        .from("vehicles")
+        .select("id")
+        .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+      const vehicleIds = (vehicles || []).map((v) => v.id);
+      if (vehicleIds.length > 0) {
+        query = query.in("vehicle_id", vehicleIds);
+      } else {
+        return NextResponse.json({ maintenance: [], total: 0, page, pageSize, hasMore: false });
+      }
+    }
+    if (filters.date_from) query = query.gte("created_at", filters.date_from);
+    if (filters.date_to) query = query.lte("created_at", filters.date_to);
+    if (filters.supplier) query = query.ilike("supplier_name", `%${filters.supplier}%`);
 
-    const fallback = await fallbackQuery.order("created_at", { ascending: false }).range(from, to);
-    data = fallback.data;
-    error = fallback.error;
-    count = fallback.count;
-  }
+    const { data, error, count } = await query
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
-  if (error) {
-    console.error("Failed to load maintenance:", error);
-    return NextResponse.json({ error: "Failed to load maintenance" }, { status: 500 });
+    if (error) {
+      console.error("Maintenance GET error:", error);
+      return NextResponse.json({ error: error.message, details: error }, { status: 500 });
+    }
+
+    // BATCHED vehicle lookup - fixes N+1 query problem
+    // Collect unique vehicle IDs and fetch all vehicles in ONE query
+    const vehicleIds = [...new Set((data || []).filter(m => m.vehicle_id).map(m => m.vehicle_id))];
+    
+    let vehicleMap = new Map<string, { vehicle_code: string; plate_number: string | null; brand: string | null; model: string | null }>();
+    
+    if (vehicleIds.length > 0) {
+      const { data: vehicles } = await supabase
+        .from("vehicles")
+        .select("id, vehicle_code, plate_number, brand, model")
+        .in("id", vehicleIds);
+      
+      if (vehicles) {
+        vehicleMap = new Map(vehicles.map(v => [v.id, {
+          vehicle_code: v.vehicle_code,
+          plate_number: v.plate_number,
+          brand: v.brand,
+          model: v.model,
+        }]));
+      }
+    }
+
+    // Map vehicle data to maintenance records
+    const maintenanceWithVehicles = (data || []).map(m => ({
+      ...m,
+      vehicles: m.vehicle_id ? vehicleMap.get(m.vehicle_id) || null : null,
+    }));
+
+    const total = count || 0;
+    const hasMore = from + (data?.length || 0) < total;
+
+    return NextResponse.json({ 
+      maintenance: maintenanceWithVehicles, 
+      total,
+      page,
+      pageSize,
+      hasMore,
+    });
+  } catch (err) {
+    console.error("Maintenance GET exception:", err);
+    return NextResponse.json({ 
+      error: "Unexpected error", 
+      details: err instanceof Error ? err.message : String(err) 
+    }, { status: 500 });
   }
-  return NextResponse.json({ maintenance: data, total: count || 0 });
 }
 
 export async function POST(req: Request) {
@@ -168,10 +186,10 @@ export async function DELETE(req: Request) {
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
-    // Hard delete for now (soft delete requires is_deleted column)
+    // Soft delete - set is_deleted flag instead of hard delete
     const { error } = await supabase
       .from("maintenance")
-      .delete()
+      .update({ is_deleted: true, updated_by: session.user.id })
       .eq("id", id);
     if (error) {
       console.error("Failed to delete maintenance:", error);

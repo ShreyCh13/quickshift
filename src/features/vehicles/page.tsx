@@ -1,29 +1,27 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import MobileShell from "@/components/MobileShell";
 import { clearSession, loadSession } from "@/lib/auth";
 import type { Session, VehicleRow } from "@/lib/types";
-import { fetchVehicles, createVehicle, deleteVehicle } from "./api";
+import { createVehicle, updateVehicle, deleteVehicle } from "./api";
 import FormField from "@/components/FormField";
 import Toast from "@/components/Toast";
+import Skeleton from "@/components/Skeleton";
+import { useVehiclesInfinite, queryKeys } from "@/hooks/useQueries";
+import { useDebounce } from "@/hooks/useDebounce";
 
 export default function VehiclesPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
-  const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const debouncedSearch = useDebounce(search, 300);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-
-  // Pagination state
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [total, setTotal] = useState(0);
-  const PAGE_SIZE = 20;
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const [newVehicle, setNewVehicle] = useState({
     vehicle_code: "",
@@ -33,7 +31,37 @@ export default function VehiclesPage() {
     notes: "",
   });
 
+  // Edit state
+  const [editingVehicle, setEditingVehicle] = useState<VehicleRow | null>(null);
+  const [editForm, setEditForm] = useState({
+    vehicle_code: "",
+    brand: "",
+    model: "",
+    year: "",
+    notes: "",
+  });
+
   const isAdmin = session?.user.role === "admin";
+
+  // React Query infinite query for vehicles
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetching,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useVehiclesInfinite(
+    debouncedSearch ? { search: debouncedSearch } : undefined,
+    20
+  );
+
+  // Flatten paginated data
+  const vehicles = data?.pages.flatMap((page) => page.data) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
 
   useEffect(() => {
     const sessionData = loadSession();
@@ -44,80 +72,49 @@ export default function VehiclesPage() {
     setSession(sessionData);
   }, [router]);
 
-  // Debounce search input
+  // Infinite scroll - load more when reaching bottom
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [search]);
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
 
-  // Reset and reload when search changes
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Handle unauthorized errors
   useEffect(() => {
-    if (session) {
-      setPage(1);
-      loadVehicles(1, true);
+    if (isError && error?.message === "Unauthorized") {
+      clearSession();
+      router.replace("/login");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, debouncedSearch]);
+  }, [isError, error, router]);
 
-  const loadVehicles = useCallback(async (pageNum: number = 1, reset: boolean = false) => {
-    setLoading(true);
-    const data = await fetchVehicles({ search: debouncedSearch, page: pageNum, pageSize: PAGE_SIZE });
-    
-    if (!data || typeof data !== "object") {
-      setError("Failed to load vehicles: Empty response");
-      setVehicles([]);
-      setLoading(false);
-      return;
-    }
-    
-    if ("error" in data && data.error) {
-      if (data.error === "Unauthorized") {
-        clearSession();
-        router.replace("/login");
-        return;
-      }
-      setError("details" in data && data.details ? `${data.error}: ${data.details}` : data.error);
-      setVehicles([]);
-    } else {
-      setError(null);
-      const newVehicles = "vehicles" in data && Array.isArray(data.vehicles) ? data.vehicles : [];
-      
-      if (reset) {
-        setVehicles(newVehicles);
-      } else {
-        setVehicles(prev => [...prev, ...newVehicles]);
-      }
-      
-      setTotal("total" in data ? (data.total as number) : 0);
-      setHasMore(newVehicles.length === PAGE_SIZE);
-    }
-    
-    setPage(pageNum);
-    setLoading(false);
-  }, [debouncedSearch, router]);
-
-  function handleLoadMore() {
-    if (!loading && hasMore) {
-      loadVehicles(page + 1, false);
-    }
-  }
+  const invalidateAndRefetch = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+  }, [queryClient]);
 
   async function handleCreate() {
     if (!newVehicle.vehicle_code.trim()) {
-      setError("Vehicle code is required");
+      setLocalError("Vehicle code is required");
       return;
     }
     if (!newVehicle.brand.trim()) {
-      setError("Brand is required");
+      setLocalError("Brand is required");
       return;
     }
     if (!newVehicle.model.trim()) {
-      setError("Model is required");
+      setLocalError("Model is required");
       return;
     }
-    setError(null);
+    setLocalError(null);
     const payload = {
       vehicle_code: newVehicle.vehicle_code.trim(),
       brand: newVehicle.brand.trim(),
@@ -127,33 +124,86 @@ export default function VehiclesPage() {
     };
     const res = await createVehicle(payload);
     if (res.error) {
-      setError(res.error);
+      setLocalError(res.error);
       return;
     }
     setNewVehicle({ vehicle_code: "", brand: "", model: "", year: "", notes: "" });
     setShowAddForm(false);
-    loadVehicles(1, true);
+    invalidateAndRefetch();
   }
 
   async function handleDelete(id: string, code: string) {
     if (!confirm(`Deactivate vehicle ${code}?`)) return;
-    setError(null);
+    setLocalError(null);
     const res = await deleteVehicle(id, true);
     if (res.error) {
-      setError(res.error);
+      setLocalError(res.error);
       return;
     }
-    loadVehicles(1, true);
+    invalidateAndRefetch();
   }
+
+  function startEdit(vehicle: VehicleRow) {
+    setEditingVehicle(vehicle);
+    setEditForm({
+      vehicle_code: vehicle.vehicle_code || "",
+      brand: vehicle.brand || "",
+      model: vehicle.model || "",
+      year: vehicle.year ? String(vehicle.year) : "",
+      notes: vehicle.notes || "",
+    });
+  }
+
+  function cancelEdit() {
+    setEditingVehicle(null);
+    setEditForm({ vehicle_code: "", brand: "", model: "", year: "", notes: "" });
+  }
+
+  async function handleUpdate() {
+    if (!editingVehicle) return;
+    if (!editForm.vehicle_code.trim()) {
+      setLocalError("Vehicle code is required");
+      return;
+    }
+    if (!editForm.brand.trim()) {
+      setLocalError("Brand is required");
+      return;
+    }
+    if (!editForm.model.trim()) {
+      setLocalError("Model is required");
+      return;
+    }
+    setLocalError(null);
+    const payload = {
+      id: editingVehicle.id,
+      vehicle_code: editForm.vehicle_code.trim(),
+      brand: editForm.brand.trim(),
+      model: editForm.model.trim(),
+      year: editForm.year ? Number(editForm.year) : null,
+      notes: editForm.notes || null,
+    };
+    const res = await updateVehicle(payload);
+    if (res.error) {
+      setLocalError(res.error);
+      return;
+    }
+    cancelEdit();
+    invalidateAndRefetch();
+  }
+
+  const displayError = localError || (isError ? error?.message : null);
 
   return (
     <MobileShell title="Vehicles">
       <div className="space-y-4 p-4 pb-24">
-        {error && (
+        {displayError && (
           <div className="space-y-2">
-            <Toast message={error} tone="error" />
+            <Toast message={displayError} tone="error" />
             <button
-              onClick={() => loadVehicles(1, true)}
+              onClick={() => {
+                setLocalError(null);
+                refetch();
+              }}
               className="w-full rounded-lg border-2 border-slate-300 bg-white py-2 text-sm font-semibold text-slate-700 active:bg-slate-50"
             >
               Retry Load
@@ -234,6 +284,62 @@ export default function VehiclesPage() {
           </div>
         )}
 
+        {editingVehicle && isAdmin && (
+          <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+            <h3 className="mb-3 text-lg font-bold text-slate-900">Edit Vehicle</h3>
+            <div className="space-y-3">
+              <FormField
+                label="Vehicle Code *"
+                value={editForm.vehicle_code}
+                onChange={(e) => setEditForm({ ...editForm, vehicle_code: e.target.value })}
+                placeholder="e.g. HR38AF-4440"
+                required
+              />
+              <FormField
+                label="Brand *"
+                value={editForm.brand}
+                onChange={(e) => setEditForm({ ...editForm, brand: e.target.value })}
+                placeholder="e.g. TOYOTA"
+                required
+              />
+              <FormField
+                label="Model *"
+                value={editForm.model}
+                onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
+                placeholder="e.g. INNOVA CRYSTA"
+                required
+              />
+              <FormField
+                label="Year"
+                value={editForm.year}
+                onChange={(e) => setEditForm({ ...editForm, year: e.target.value })}
+                placeholder="e.g. 2023"
+                type="number"
+              />
+              <FormField
+                label="Notes"
+                value={editForm.notes}
+                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                placeholder="Optional notes..."
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelEdit}
+                  className="flex-1 rounded-lg border-2 border-slate-300 bg-white py-3 font-semibold text-slate-700 active:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdate}
+                  className="flex-1 rounded-lg bg-amber-500 py-3 font-semibold text-white active:bg-amber-600"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Results count */}
         {total > 0 && (
           <div className="text-sm text-slate-500">
@@ -241,8 +347,12 @@ export default function VehiclesPage() {
           </div>
         )}
 
-        {loading && vehicles.length === 0 ? (
-          <div className="py-12 text-center text-slate-400">Loading...</div>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-32 w-full rounded-xl" />
+            ))}
+          </div>
         ) : vehicles.length === 0 ? (
           <div className="rounded-xl border-2 border-dashed bg-slate-50 px-6 py-12 text-center">
             <p className="font-medium text-slate-600">No vehicles found</p>
@@ -269,7 +379,6 @@ export default function VehiclesPage() {
                       {v.brand && <span className="font-medium text-blue-700">{v.brand}</span>}
                       {v.model && <span>{v.model}</span>}
                     </div>
-                    {v.year && <div className="mt-1 text-xs text-slate-500">Year: {v.year}</div>}
                     {!v.is_active && (
                       <div className="mt-2 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
                         INACTIVE
@@ -291,31 +400,47 @@ export default function VehiclesPage() {
                         >
                           Maintain
                         </button>
+                        <button
+                          onClick={() => router.push(`/vehicles/history?vehicle=${v.id}`)}
+                          className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white active:bg-purple-700"
+                        >
+                          History
+                        </button>
                       </>
                     )}
                     {isAdmin && v.is_active && (
-                      <button
-                        onClick={() => handleDelete(v.id, v.vehicle_code)}
-                        className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white active:bg-red-700"
-                      >
-                        Delete
-                      </button>
+                      <>
+                        <button
+                          onClick={() => startEdit(v)}
+                          className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white active:bg-amber-600"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(v.id, v.vehicle_code)}
+                          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white active:bg-red-700"
+                        >
+                          Delete
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
               </div>
             ))}
 
-            {/* Load More Button */}
-            {hasMore && (
-              <button
-                onClick={handleLoadMore}
-                disabled={loading}
-                className="w-full rounded-xl border-2 border-blue-200 bg-white py-3 font-semibold text-blue-600 active:bg-blue-50 disabled:opacity-50"
-              >
-                {loading ? "Loading..." : "Load More"}
-              </button>
-            )}
+            {/* Infinite scroll trigger */}
+            <div ref={loadMoreRef} className="py-4 text-center">
+              {isFetchingNextPage && (
+                <div className="flex items-center justify-center gap-2 text-slate-500">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                  Loading more...
+                </div>
+              )}
+              {!hasNextPage && vehicles.length > 0 && (
+                <p className="text-sm text-slate-400">All vehicles loaded</p>
+              )}
+            </div>
           </div>
         )}
       </div>

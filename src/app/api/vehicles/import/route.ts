@@ -3,12 +3,29 @@ import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
 import { parseCsv, parseFirstSheet } from "@/lib/excel";
 import type { VehiclesImportResult } from "@/lib/types";
+import { checkRateLimit, getClientIp, rateLimitPresets, rateLimitHeaders } from "@/lib/rate-limit";
+import { invalidateCache, cacheKeys } from "@/lib/cache";
 
 export async function POST(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  
+  // Rate limit imports (heavy operation)
+  const ip = getClientIp(req);
+  const rateLimit = checkRateLimit(
+    `import:${ip}`,
+    rateLimitPresets.import.limit,
+    rateLimitPresets.import.windowMs
+  );
+  
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      { error: "Too many import requests. Please try again later." },
+      { status: 429, headers: rateLimitHeaders(rateLimit) }
+    );
   }
 
   const formData = await req.formData();
@@ -171,15 +188,34 @@ export async function POST(req: Request) {
     }
   }
 
-  // Batch update (Supabase doesn't support batch update, so we do it in chunks)
-  for (const { id, payload, rowNum } of toUpdate) {
-    const { error } = await supabase.from("vehicles").update(payload).eq("id", id);
-    if (error) {
-      result.errors.push({ row: rowNum, message: error.message });
-    } else {
-      result.updated += 1;
-    }
+  // Batch update using parallel chunks for better performance
+  // Process in chunks of 10 to avoid overwhelming the database
+  const CHUNK_SIZE = 10;
+  for (let i = 0; i < toUpdate.length; i += CHUNK_SIZE) {
+    const chunk = toUpdate.slice(i, i + CHUNK_SIZE);
+    const results = await Promise.allSettled(
+      chunk.map(({ id, payload }) => 
+        supabase.from("vehicles").update(payload).eq("id", id)
+      )
+    );
+    
+    results.forEach((res, idx) => {
+      const item = chunk[idx];
+      if (res.status === 'rejected' || (res.status === 'fulfilled' && res.value.error)) {
+        const errorMsg = res.status === 'rejected' 
+          ? String(res.reason) 
+          : res.value.error?.message || 'Unknown error';
+        result.errors.push({ row: item.rowNum, message: errorMsg });
+      } else {
+        result.updated += 1;
+      }
+    });
   }
 
-  return NextResponse.json(result);
+  // Invalidate vehicle cache after import
+  if (result.inserted > 0 || result.updated > 0) {
+    invalidateCache('vehicles:');
+  }
+
+  return NextResponse.json(result, { headers: rateLimitHeaders(rateLimit) });
 }

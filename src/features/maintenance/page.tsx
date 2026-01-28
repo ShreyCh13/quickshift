@@ -1,44 +1,72 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import MobileShell from "@/components/MobileShell";
-import { getSessionHeader, loadSession } from "@/lib/auth";
-import type { Session, MaintenanceRow, VehicleRow } from "@/lib/types";
-import { buildExportUrl, fetchMaintenance, deleteMaintenance, updateMaintenance } from "./api";
-import { fetchVehicles } from "@/features/vehicles/api";
+import { getSessionHeader, loadSession, clearSession } from "@/lib/auth";
+import type { Session, MaintenanceRow } from "@/lib/types";
+import { buildExportUrl, updateMaintenance } from "./api";
+import Skeleton from "@/components/Skeleton";
+import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, queryKeys } from "@/hooks/useQueries";
 
 interface MaintenanceItemWithVehicle extends MaintenanceRow {
   vehicles?: {
     vehicle_code: string;
-    plate_number?: string;
-    brand?: string;
-    model?: string;
-  };
+    plate_number?: string | null;
+    brand?: string | null;
+    model?: string | null;
+  } | null;
 }
 
 export default function MaintenancePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
-  const [maintenance, setMaintenance] = useState<MaintenanceItemWithVehicle[]>([]);
-  const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Record<string, unknown>>({});
-  
-  // Pagination state
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [total, setTotal] = useState(0);
-  const PAGE_SIZE = 20;
+  const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = session?.user.role === "admin";
+
+  // Get vehicles for dropdown
+  const { data: vehicles = [] } = useVehicleDropdown();
+
+  // Build filters for the query
+  const filters = useMemo(() => {
+    const f: Record<string, string> = {};
+    if (appliedFilters.vehicle_id) f.vehicle_id = appliedFilters.vehicle_id;
+    if (appliedFilters.vehicle_query) f.vehicle_query = appliedFilters.vehicle_query;
+    if (appliedFilters.date_from) f.date_from = appliedFilters.date_from;
+    if (appliedFilters.date_to) f.date_to = appliedFilters.date_to;
+    if (appliedFilters.supplier) f.supplier = appliedFilters.supplier;
+    return Object.keys(f).length > 0 ? f : undefined;
+  }, [appliedFilters]);
+
+  // React Query infinite query for maintenance
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    isError,
+    error,
+  } = useMaintenanceInfinite(filters, 20);
+
+  // Delete mutation
+  const deleteMutation = useDeleteMaintenance();
+
+  // Flatten paginated data
+  const maintenance: MaintenanceItemWithVehicle[] = data?.pages.flatMap((page) => page.data) ?? [];
+  const total = data?.pages[0]?.total ?? 0;
 
   useEffect(() => {
     const s = loadSession();
@@ -49,63 +77,46 @@ export default function MaintenancePage() {
     setSession(s);
   }, [router]);
 
+  // Handle unauthorized errors
   useEffect(() => {
-    if (session) {
-      loadVehicles();
-      loadMaintenance(1, true);
+    if (isError && error?.message === "Unauthorized") {
+      clearSession();
+      router.replace("/login");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [isError, error, router]);
 
-  async function loadVehicles() {
-    const res = await fetchVehicles({ page: 1, pageSize: 200 });
-    setVehicles(res.vehicles || []);
-  }
+  // Infinite scroll - load more when reaching bottom
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
 
-  const getFilters = useCallback(() => {
-    const filters: Record<string, unknown> = {};
-    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
-    if (vehicleSearch) filters.vehicle_query = vehicleSearch;
-    if (dateFrom) filters.date_from = dateFrom;
-    if (dateTo) filters.date_to = dateTo;
-    if (supplierFilter) filters.supplier = supplierFilter;
-    return filters;
-  }, [vehicleFilter, vehicleSearch, dateFrom, dateTo, supplierFilter]);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1 }
+    );
 
-  async function loadMaintenance(pageNum: number = 1, reset: boolean = false) {
-    setLoading(true);
-    const filters = getFilters();
-    const res = await fetchMaintenance({ filters, page: pageNum, pageSize: PAGE_SIZE });
-    
-    if (reset) {
-      setMaintenance(res.maintenance || []);
-    } else {
-      setMaintenance(prev => [...prev, ...(res.maintenance || [])]);
-    }
-    
-    setTotal(res.total || 0);
-    setHasMore((res.maintenance || []).length === PAGE_SIZE);
-    setPage(pageNum);
-    setLoading(false);
-  }
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   function handleApplyFilters() {
-    setPage(1);
-    loadMaintenance(1, true);
-  }
-
-  function handleLoadMore() {
-    if (!loading && hasMore) {
-      loadMaintenance(page + 1, false);
-    }
+    const f: Record<string, string> = {};
+    if (vehicleFilter) f.vehicle_id = vehicleFilter;
+    if (vehicleSearch) f.vehicle_query = vehicleSearch;
+    if (dateFrom) f.date_from = dateFrom;
+    if (dateTo) f.date_to = dateTo;
+    if (supplierFilter) f.supplier = supplierFilter;
+    setAppliedFilters(f);
   }
 
   async function handleExport() {
-    const filters = getFilters();
     const exportUrl = buildExportUrl({
       type: "maintenance",
       format: "xlsx",
-      filters: Object.keys(filters).length ? filters : undefined,
+      filters: Object.keys(appliedFilters).length ? appliedFilters : undefined,
     });
     const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
     if (!res.ok) {
@@ -123,19 +134,23 @@ export default function MaintenancePage() {
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this maintenance record?")) return;
-    const res = await deleteMaintenance(id);
-    if (!res.error) loadMaintenance(1, true);
+    try {
+      await deleteMutation.mutateAsync(id);
+    } catch (err) {
+      alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown error"));
+    }
   }
 
   async function handleSaveEdit(itemId: string) {
     await updateMaintenance({ id: itemId, ...editDraft });
     setEditId(null);
-    loadMaintenance(1, true);
+    queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
   }
 
   function handleStartEdit(item: MaintenanceItemWithVehicle) {
     setEditId(item.id);
     setEditDraft({
+      vehicle_id: item.vehicle_id,
       odometer_km: item.odometer_km,
       bill_number: item.bill_number,
       supplier_name: item.supplier_name,
@@ -224,8 +239,12 @@ export default function MaintenancePage() {
         )}
 
         {/* List */}
-        {loading && maintenance.length === 0 ? (
-          <div className="py-12 text-center text-slate-400">Loading...</div>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-28 w-full rounded-xl" />
+            ))}
+          </div>
         ) : maintenance.length === 0 ? (
           <div className="rounded-xl bg-white p-8 text-center shadow">
             <p className="text-slate-500">No maintenance records found</p>
@@ -338,9 +357,10 @@ export default function MaintenancePage() {
                               {isAdmin && (
                                 <button
                                   onClick={() => handleDelete(item.id)}
-                                  className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white active:bg-red-700"
+                                  disabled={deleteMutation.isPending}
+                                  className="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-semibold text-white active:bg-red-700 disabled:opacity-50"
                                 >
-                                  Delete
+                                  {deleteMutation.isPending ? "Deleting..." : "Delete"}
                                 </button>
                               )}
                             </div>
@@ -353,16 +373,18 @@ export default function MaintenancePage() {
               );
             })}
 
-            {/* Load More Button */}
-            {hasMore && (
-              <button
-                onClick={handleLoadMore}
-                disabled={loading}
-                className="w-full rounded-xl border-2 border-emerald-200 bg-white py-3 font-semibold text-emerald-600 active:bg-emerald-50 disabled:opacity-50"
-              >
-                {loading ? "Loading..." : "Load More"}
-              </button>
-            )}
+            {/* Infinite scroll trigger */}
+            <div ref={loadMoreRef} className="py-4 text-center">
+              {isFetchingNextPage && (
+                <div className="flex items-center justify-center gap-2 text-slate-500">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+                  Loading more...
+                </div>
+              )}
+              {!hasNextPage && maintenance.length > 0 && (
+                <p className="text-sm text-slate-400">All maintenance records loaded</p>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -1,34 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# QuickShift
 
-## Getting Started
+Mobile-first fleet vehicle inspection and maintenance tracking app.
 
-First, run the development server:
+## Tech Stack
+
+- **Frontend**: Next.js 14, React 19, TypeScript, Tailwind CSS, React Query
+- **Backend**: Next.js API Routes, Supabase (PostgreSQL)
+- **Deployment**: Vercel
+
+## Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Copy environment file and fill in values
+cp env.example .env.local
+
+# Run development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-## Learn More
+```env
+SUPABASE_URL=your-supabase-url
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+BACKUP_SECRET=your-backup-secret
+S3_ENDPOINT=your-s3-endpoint
+S3_ACCESS_KEY_ID=your-access-key
+S3_SECRET_ACCESS_KEY=your-secret-key
+S3_BUCKET=your-bucket-name
+S3_REGION=your-region
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Database Setup
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Run in Supabase SQL Editor:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **First time setup**: Run `supabase/schema.sql`
+2. **Seed data (optional)**: Run `supabase/seed.sql`
+3. **Existing database**: Run `supabase/migration_improvements.sql`
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/                    # Next.js pages and API routes
+│   ├── api/               # Backend API endpoints
+│   └── [pages]/           # Frontend pages
+├── components/            # Shared UI components
+├── features/              # Feature modules (vehicles, inspections, etc.)
+├── hooks/                 # React hooks (React Query, debounce, etc.)
+└── lib/                   # Utilities (auth, db, validation, etc.)
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Key Features
+
+- Vehicle management with import/export
+- Inspection logging with customizable remarks
+- Maintenance tracking with costs
+- Analytics dashboard
+- Weekly automated backups to S3
+- Soft delete for data preservation
+- Rate limiting on login
+- Password hashing for new users
+
+## API Routes
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/auth/login` | User login |
+| `GET/POST/PUT/DELETE /api/vehicles` | Vehicle CRUD |
+| `POST /api/vehicles/import` | Bulk vehicle import |
+| `GET/POST/PUT/DELETE /api/events/inspections` | Inspections CRUD |
+| `GET/POST/PUT/DELETE /api/events/maintenance` | Maintenance CRUD |
+| `GET /api/analytics` | Fleet analytics |
+| `GET /api/export` | Data export (CSV/XLSX) |
+| `POST /api/backup` | Trigger backup to S3 |
+
+## Security Notes
+
+- Passwords are hashed for new users (PBKDF2)
+- Login is rate-limited (5 attempts/15 min)
+- Sessions stored in localStorage (consider HTTP-only cookies for production)
+- RLS is OFF - access control is in API routes
+
+## Maintenance
+
+- **Backups**: Automatic weekly via GitHub Actions
+- **Logs**: Check Vercel and Supabase dashboards
+- **Database**: Run migration file for upgrades
+
+---
+
+See `IMPROVEMENTS_LOG.md` for detailed changelog.

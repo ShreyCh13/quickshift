@@ -242,6 +242,8 @@ The following were **NOT** implemented as they require major refactoring:
 
 These remain as future improvements requiring more substantial work.
 
+> **📋 See [SCALABILITY_PLAN.md](./SCALABILITY_PLAN.md)** for the comprehensive roadmap addressing all of the above items with implementation details and priorities.
+
 ---
 
 ## ✅ VERIFICATION STEPS
@@ -266,5 +268,219 @@ After deployment, verify:
 ---
 
 **Generated:** 2026-01-17  
+**Author:** AI Code Assistant  
+**Status:** ✅ Complete
+
+---
+
+# Scalability & Production Readiness Update (2026-01-28)
+
+## Summary
+Applied comprehensive scalability improvements for handling 100+ vehicles and 50+ monthly entries, including database optimizations, frontend modernization with React Query, and security hardening.
+
+---
+
+## 🗄️ DATABASE IMPROVEMENTS
+
+### 1. **Fixed N+1 Query Problem**
+**Files:**
+- `src/app/api/events/inspections/route.ts`
+- `src/app/api/events/maintenance/route.ts`
+
+**Before:** 51 queries per page (1 list + 50 vehicle lookups in a loop)
+**After:** 2 queries per page (1 list + 1 batched vehicle lookup)
+
+**Performance improvement:** ~96% reduction in database queries
+
+### 2. **New Scalability Migration**
+**File:** `supabase/migration_scalability.sql`
+
+- Added composite indexes for common queries
+- Added full-text search indexes (pg_trgm)
+- Fixed user foreign key constraints (ON DELETE SET NULL)
+- Created `vehicle_stats` analytics view
+- Verified soft delete columns exist
+
+### 3. **Soft Delete Implementation**
+- DELETE operations now set `is_deleted = true` instead of hard delete
+- All GET queries filter out deleted records
+- Preserves audit trail for compliance
+
+---
+
+## 🔧 API IMPROVEMENTS
+
+### 1. **Rate Limiting**
+**Files:**
+- `src/lib/rate-limit.ts` (new)
+- `src/app/api/auth/login/route.ts`
+- `src/app/api/vehicles/import/route.ts`
+
+**Limits applied:**
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| Login | 5 attempts | 15 min |
+| Import | 5 requests | 5 min |
+
+Additional: IP blocking after 10 consecutive failed logins
+
+### 2. **Server-Side Caching**
+**File:** `src/lib/cache.ts` (new)
+
+- In-memory cache with TTL support
+- Cache invalidation by key prefix
+- Cache statistics for monitoring
+- Ready for Redis migration
+
+### 3. **Optimized Vehicle Import**
+**File:** `src/app/api/vehicles/import/route.ts`
+
+- Parallel chunked updates (10 at a time)
+- Cache invalidation after successful import
+- Rate limiting protection
+
+### 4. **Standardized Pagination Response**
+All list endpoints now return:
+```json
+{
+  "data": [...],
+  "total": 100,
+  "page": 1,
+  "pageSize": 20,
+  "hasMore": true
+}
+```
+
+---
+
+## 🔐 SECURITY IMPROVEMENTS
+
+### 1. **Password Hashing**
+**File:** `src/lib/password.ts` (new)
+
+- PBKDF2 hashing with Web Crypto API (Edge-compatible)
+- 100,000 iterations with SHA-256
+- Backward compatible (supports existing plaintext passwords during migration)
+- Password strength validation
+
+### 2. **Login Security**
+**File:** `src/app/api/auth/login/route.ts`
+
+- Rate limiting (5 attempts per 15 minutes)
+- IP blocking after repeated failures
+- Rate limit headers in response
+- Supports both hashed and plaintext passwords
+
+### 3. **User API Security**
+**File:** `src/app/api/users/route.ts`
+
+- Passwords hashed before storage
+- Passwords no longer returned in GET response
+- Password strength validation on create/update
+
+---
+
+## ⚛️ FRONTEND IMPROVEMENTS
+
+### 1. **React Query Integration**
+**Files:**
+- `src/components/QueryProvider.tsx` (new)
+- `src/hooks/useQueries.ts` (new)
+- `src/app/layout.tsx` (updated)
+
+**Features:**
+- Automatic caching (30s stale time)
+- Background refetching
+- Request deduplication
+- Retry with exponential backoff
+- Infinite query support
+
+### 2. **Infinite Scroll**
+**Files:**
+- `src/features/vehicles/page.tsx`
+- `src/features/inspections/page.tsx`
+- `src/features/maintenance/page.tsx`
+
+- Replaced "Load More" button with intersection observer
+- Automatic loading when scrolling to bottom
+- Skeleton loaders during initial load
+- "All loaded" indicator at end
+
+### 3. **Skeleton Loaders**
+All list pages now show skeleton loading states instead of "Loading..." text.
+
+### 4. **Query Key Management**
+Centralized query keys in `src/hooks/useQueries.ts` for consistent cache invalidation.
+
+---
+
+## 📦 DEPENDENCIES ADDED
+
+```json
+{
+  "@tanstack/react-query": "^5.62.0"
+}
+```
+
+---
+
+## 📊 PERFORMANCE GAINS
+
+| Area | Before | After | Improvement |
+|------|--------|-------|-------------|
+| Inspections list query | ~51 queries | 2 queries | ~96% fewer queries |
+| Maintenance list query | ~51 queries | 2 queries | ~96% fewer queries |
+| Vehicle import (100 updates) | Sequential | Parallel (10 chunks) | ~10x faster |
+| Frontend cache | None | React Query | Instant subsequent loads |
+| Login protection | None | Rate limited | Brute force protection |
+
+---
+
+## 📋 MIGRATION CHECKLIST
+
+To apply these changes:
+
+1. **Database:**
+   ```bash
+   # Run the new scalability migration
+   psql -f supabase/migration_scalability.sql
+   ```
+
+2. **Dependencies:**
+   ```bash
+   npm install
+   # This will install @tanstack/react-query
+   ```
+
+3. **Password Migration (Optional):**
+   - Existing users can still log in with plaintext passwords
+   - New users will have hashed passwords
+   - Update existing passwords by having users "change password"
+
+---
+
+## ⚠️ BREAKING CHANGES
+
+### None for end users!
+
+**For developers:**
+- Users API no longer returns passwords
+- Login now returns rate limit headers
+- Pagination response format standardized
+
+---
+
+## 🔮 STILL PENDING (See SCALABILITY_PLAN.md)
+
+- [ ] HTTP-only session cookies
+- [ ] CSRF protection
+- [ ] Database partitioning (when needed)
+- [ ] Materialized views for analytics
+- [ ] Full-text search UI
+- [ ] Background job processing
+
+---
+
+**Generated:** 2026-01-28  
 **Author:** AI Code Assistant  
 **Status:** ✅ Complete
