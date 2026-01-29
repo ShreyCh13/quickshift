@@ -174,16 +174,25 @@ function VehicleHistoryContent() {
     if (!vehicle) return;
 
     // Prepare inspections data
-    const inspectionRows = inspections.map((i) => ({
-      "Date & Time": new Date(i.created_at).toLocaleString("en-IN"),
-      "Vehicle Code": vehicle.vehicle_code,
-      "Plate Number": vehicle.plate_number || "-",
-      "Vehicle Brand": vehicle.brand || "-",
-      "Vehicle Model": vehicle.model || "-",
-      "Odometer (km)": i.odometer_km,
-      "Driver Name": i.driver_name || "-",
-      Remarks: i.remarks_json ? JSON.stringify(i.remarks_json) : "-",
-    }));
+    const inspectionRows = inspections.map((i) => {
+      // Format remarks as readable text instead of JSON
+      let remarksText = "-";
+      if (i.remarks_json && typeof i.remarks_json === "object") {
+        remarksText = Object.entries(i.remarks_json)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join("; ");
+      }
+      return {
+        "Date & Time": new Date(i.created_at).toLocaleString("en-IN"),
+        "Vehicle Code": vehicle.vehicle_code,
+        "Plate Number": vehicle.plate_number || "-",
+        "Vehicle Brand": vehicle.brand || "-",
+        "Vehicle Model": vehicle.model || "-",
+        "Odometer (km)": i.odometer_km,
+        "Driver Name": i.driver_name || "-",
+        Remarks: remarksText,
+      };
+    });
 
     // Prepare maintenance data
     const maintenanceRows = maintenance.map((m) => ({

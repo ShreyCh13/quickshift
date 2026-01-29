@@ -20,6 +20,7 @@ export type UserRow = {
   display_name: string;
   role: Role;
   created_at: string;
+  updated_at?: string;
 };
 
 export type VehicleRow = {
@@ -55,6 +56,8 @@ export type InspectionRow = {
   created_by: string;
   updated_by: string | null;
   is_deleted: boolean;
+  deleted_at: string | null;
+  deleted_by: string | null;
 };
 
 export type MaintenanceRow = {
@@ -70,6 +73,8 @@ export type MaintenanceRow = {
   created_by: string;
   updated_by: string | null;
   is_deleted: boolean;
+  deleted_at: string | null;
+  deleted_by: string | null;
 };
 
 export type VehiclesImportResult = {

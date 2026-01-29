@@ -1,6 +1,5 @@
 export { useDebounce, useDebouncedCallback } from "./useDebounce";
 export { useSession } from "./useSession";
-export { useApi, fetchWithRetry } from "./useApi";
 export { useOnlineStatus } from "./useOnlineStatus";
 export {
   queryKeys,
@@ -16,4 +15,11 @@ export {
   useUsers,
   useRemarkFields,
   useAnalytics,
+  // Admin mutations
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+  useCreateRemarkField,
+  useUpdateRemarkField,
+  useDeleteRemarkField,
 } from "./useQueries";

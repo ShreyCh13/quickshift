@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+// ============================================================================
+// Common Schemas
+// ============================================================================
+
+/**
+ * Schema for validating UUID id parameter (used in DELETE endpoints)
+ */
+export const idSchema = z.object({
+  id: z.string().uuid(),
+});
+
+/**
+ * Schema for delete with optional force flag
+ */
+export const deleteWithForceSchema = z.object({
+  id: z.string().uuid(),
+  force: z.boolean().optional(),
+});
+
+// ============================================================================
+// Auth Schemas
+// ============================================================================
+
 export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
@@ -91,3 +114,37 @@ export const maintenanceFilterSchema = z.object({
   amount_min: z.number().optional(),
   amount_max: z.number().optional(),
 });
+
+export const analyticsFilterSchema = z.object({
+  vehicle_id: z.string().uuid().optional(),
+  brand: z.string().optional(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
+  supplier: z.string().optional(),
+  type: z.enum(["all", "inspections", "maintenance"]).optional(),
+});
+
+export const vehicleFilterSchema = z.object({
+  search: z.string().optional(),
+  is_active: z.boolean().optional(),
+});
+
+// ============================================================================
+// Inferred Types (derive types from schemas for type safety)
+// ============================================================================
+
+export type IdInput = z.infer<typeof idSchema>;
+export type DeleteWithForceInput = z.infer<typeof deleteWithForceSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type UserCreateInput = z.infer<typeof userCreateSchema>;
+export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
+export type VehicleInput = z.infer<typeof vehicleSchema>;
+export type RemarkFieldInput = z.infer<typeof remarkFieldSchema>;
+export type InspectionCreateInput = z.infer<typeof inspectionCreateSchema>;
+export type InspectionUpdateInput = z.infer<typeof inspectionUpdateSchema>;
+export type MaintenanceCreateInput = z.infer<typeof maintenanceCreateSchema>;
+export type MaintenanceUpdateInput = z.infer<typeof maintenanceUpdateSchema>;
+export type InspectionsFilterInput = z.infer<typeof inspectionsFilterSchema>;
+export type MaintenanceFilterInput = z.infer<typeof maintenanceFilterSchema>;
+export type AnalyticsFilterInput = z.infer<typeof analyticsFilterSchema>;
+export type VehicleFilterInput = z.infer<typeof vehicleFilterSchema>;

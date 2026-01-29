@@ -8,16 +8,16 @@ import Toast from "@/components/Toast";
 import { loadSession, getSessionHeader } from "@/lib/auth";
 import type { RemarkFieldRow, Session, UserRow } from "@/lib/types";
 import {
-  buildExportUrl,
-  createRemarkField,
-  createUser,
-  deleteRemarkField,
-  deleteUser,
-  fetchRemarkFields,
-  fetchUsers,
-  updateRemarkField,
-  updateUser,
-} from "./api";
+  useUsers,
+  useRemarkFields,
+  useCreateUser,
+  useUpdateUser,
+  useDeleteUser,
+  useCreateRemarkField,
+  useUpdateRemarkField,
+  useDeleteRemarkField,
+} from "@/hooks/useQueries";
+import { buildExportUrl } from "./api";
 import { ListSkeleton } from "@/components/Skeleton";
 
 type TabKey = "categories" | "users" | "database";
@@ -31,12 +31,9 @@ const TABS: { key: TabKey; label: string; icon: string }[] = [
 export default function AdminPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<UserRow[]>([]);
   const [userEdits, setUserEdits] = useState<
     Record<string, { display_name: string; role: UserRow["role"]; password: string }>
   >({});
-  const [remarkFields, setRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("users");
   const [showAddUser, setShowAddUser] = useState(false);
@@ -54,8 +51,29 @@ export default function AdminPage() {
   const [draggingRemarkId, setDraggingRemarkId] = useState<string | null>(null);
   const [dragOverRemarkId, setDragOverRemarkId] = useState<string | null>(null);
   const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
-  const [isSavingRemarkOrder, setIsSavingRemarkOrder] = useState(false);
+  const [localRemarkFields, setLocalRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [remarkOrderDirty, setRemarkOrderDirty] = useState(false);
+
+  // React Query hooks - data is cached and automatically refetched
+  const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
+  const { data: remarkFieldsData = [], isLoading: remarkFieldsLoading, refetch: refetchRemarkFields } = useRemarkFields();
+  
+  // Mutations
+  const createUserMutation = useCreateUser();
+  const updateUserMutation = useUpdateUser();
+  const deleteUserMutation = useDeleteUser();
+  const createRemarkFieldMutation = useCreateRemarkField();
+  const updateRemarkFieldMutation = useUpdateRemarkField();
+  const deleteRemarkFieldMutation = useDeleteRemarkField();
+
+  // Sync local remark fields state with server data
+  useEffect(() => {
+    if (remarkFieldsData.length > 0 && !remarkOrderDirty) {
+      setLocalRemarkFields(remarkFieldsData as RemarkFieldRow[]);
+    }
+  }, [remarkFieldsData, remarkOrderDirty]);
+
+  const loading = usersLoading || remarkFieldsLoading;
 
   function startUserEdit(user: UserRow) {
     setUserEdits((prev) => ({
@@ -96,34 +114,19 @@ export default function AdminPage() {
     setSession(sessionData);
   }, [router]);
 
-  async function loadAdminData() {
-    setLoading(true);
-    const [userRes, remarkRes] = await Promise.all([fetchUsers(), fetchRemarkFields()]);
-    setUsers(userRes.users || []);
-    setRemarkFields(remarkRes.remarkFields || []);
-    setRemarkOrderDirty(false);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    if (!session) return;
-    loadAdminData();
-  }, [session]);
-
   async function handleCreateUser() {
     if (!newUser.username.trim() || !newUser.password.trim() || !newUser.display_name.trim()) {
       setError("All fields are required");
       return;
     }
     setError(null);
-    const res = await createUser(newUser);
-    if (res.error) {
-      setError(res.error);
-      return;
+    try {
+      await createUserMutation.mutateAsync(newUser);
+      setNewUser({ username: "", password: "", display_name: "", role: "staff" });
+      setShowAddUser(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user");
     }
-    setNewUser({ username: "", password: "", display_name: "", role: "staff" });
-    setShowAddUser(false);
-    loadAdminData();
   }
 
   async function handleCreateRemark() {
@@ -132,25 +135,24 @@ export default function AdminPage() {
       return;
     }
     setError(null);
-    const res = await createRemarkField({
-      key: newRemark.key,
-      label: newRemark.label,
-      sort_order: remarkFields.length
-        ? Math.max(...remarkFields.map((field) => field.sort_order || 0)) + 1
-        : 1,
-      is_active: newRemark.is_active,
-    });
-    if (res.error) {
-      setError(res.error);
-      return;
+    try {
+      await createRemarkFieldMutation.mutateAsync({
+        key: newRemark.key,
+        label: newRemark.label,
+        sort_order: localRemarkFields.length
+          ? Math.max(...localRemarkFields.map((field) => field.sort_order || 0)) + 1
+          : 1,
+        is_active: newRemark.is_active,
+      });
+      setNewRemark({ key: "", label: "", is_active: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create category");
     }
-    setNewRemark({ key: "", label: "", is_active: true });
-    loadAdminData();
   }
 
   function moveRemarkField(sourceId: string, targetId: string) {
     if (!sourceId || !targetId || sourceId === targetId) return;
-    setRemarkFields((prev) => {
+    setLocalRemarkFields((prev) => {
       const fromIndex = prev.findIndex((field) => field.id === sourceId);
       const toIndex = prev.findIndex((field) => field.id === targetId);
       if (fromIndex === -1 || toIndex === -1) return prev;
@@ -168,25 +170,60 @@ export default function AdminPage() {
 
   async function handleSaveRemarkOrder() {
     setError(null);
-    setIsSavingRemarkOrder(true);
-    const results = await Promise.all(
-      remarkFields.map((field) =>
-        updateRemarkField({
-          id: field.id,
-          key: field.key,
-          label: field.label,
-          sort_order: field.sort_order,
-          is_active: field.is_active,
-        }),
-      ),
-    );
-    const failed = results.find((res) => res.error);
-    if (failed?.error) {
-      setError(failed.error);
-    } else {
-      await loadAdminData();
+    try {
+      await Promise.all(
+        localRemarkFields.map((field) =>
+          updateRemarkFieldMutation.mutateAsync({
+            id: field.id,
+            key: field.key,
+            label: field.label,
+            sort_order: field.sort_order,
+            is_active: field.is_active,
+          }),
+        ),
+      );
+      setRemarkOrderDirty(false);
+      refetchRemarkFields();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save order");
     }
-    setIsSavingRemarkOrder(false);
+  }
+
+  async function handleDeleteUser(id: string) {
+    try {
+      await deleteUserMutation.mutateAsync(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete user");
+    }
+  }
+
+  async function handleDeleteRemarkField(id: string) {
+    try {
+      await deleteRemarkFieldMutation.mutateAsync(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete category");
+    }
+  }
+
+  async function handleSaveUser(userId: string) {
+    const editing = userEdits[userId];
+    if (!editing) return;
+    
+    const payload: { id: string; display_name?: string; role?: string; password?: string } = {
+      id: userId,
+      display_name: editing.display_name,
+      role: editing.role,
+    };
+    if (editing.password.trim()) {
+      payload.password = editing.password;
+    }
+    
+    try {
+      await updateUserMutation.mutateAsync(payload);
+      cancelUserEdit(userId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update user");
+    }
   }
 
   const exportVehicles = useMemo(() => buildExportUrl({ type: "vehicles", format: "xlsx" }), []);
@@ -209,6 +246,8 @@ export default function AdminPage() {
   }
 
   if (!session) return null;
+
+  const isSavingRemarkOrder = updateRemarkFieldMutation.isPending;
 
   return (
     <MobileShell title="Admin">
@@ -270,7 +309,7 @@ export default function AdminPage() {
                   <p className="mb-4 text-sm text-slate-500">Drag to reorder categories</p>
 
                   <div className="space-y-2">
-                    {remarkFields.map((field) => (
+                    {localRemarkFields.map((field) => (
                       <div
                         key={field.id}
                         draggable
@@ -318,7 +357,7 @@ export default function AdminPage() {
                             {field.is_active ? "Active" : "Inactive"}
                           </span>
                           <button
-                            onClick={() => deleteRemarkField(field.id).then(loadAdminData)}
+                            onClick={() => handleDeleteRemarkField(field.id)}
                             className="rounded p-1 text-red-500 active:bg-red-50"
                           >
                             🗑️
@@ -346,9 +385,10 @@ export default function AdminPage() {
                       />
                       <button
                         onClick={handleCreateRemark}
-                        className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white active:bg-emerald-700"
+                        disabled={createRemarkFieldMutation.isPending}
+                        className="w-full rounded-lg bg-emerald-600 py-2.5 font-semibold text-white active:bg-emerald-700 disabled:opacity-50"
                       >
-                        Add Category
+                        {createRemarkFieldMutation.isPending ? "Adding..." : "Add Category"}
                       </button>
                     </div>
                   </div>
@@ -376,7 +416,7 @@ export default function AdminPage() {
                   <div className="mb-2 text-xs font-medium text-slate-500">{users.length} USERS</div>
 
                   <div className="space-y-3">
-                    {users.map((user) => {
+                    {(users as UserRow[]).map((user) => {
                       const editing = userEdits[user.id];
                       const isCurrentUser = user.id === session?.user.id;
 
@@ -433,23 +473,11 @@ export default function AdminPage() {
                               />
                               <div className="flex gap-2">
                                 <button
-                                  onClick={() => {
-                                    const payload: Record<string, unknown> = {
-                                      id: user.id,
-                                      display_name: editing.display_name,
-                                      role: editing.role,
-                                    };
-                                    if (editing.password.trim()) {
-                                      payload.password = editing.password;
-                                    }
-                                    updateUser(payload).then(() => {
-                                      cancelUserEdit(user.id);
-                                      loadAdminData();
-                                    });
-                                  }}
-                                  className="flex-1 rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white active:bg-slate-800"
+                                  onClick={() => handleSaveUser(user.id)}
+                                  disabled={updateUserMutation.isPending}
+                                  className="flex-1 rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white active:bg-slate-800 disabled:opacity-50"
                                 >
-                                  Save
+                                  {updateUserMutation.isPending ? "Saving..." : "Save"}
                                 </button>
                                 <button
                                   onClick={() => cancelUserEdit(user.id)}
@@ -481,8 +509,9 @@ export default function AdminPage() {
                               </button>
                               {!isCurrentUser && (
                                 <button
-                                  onClick={() => deleteUser(user.id).then(loadAdminData)}
-                                  className="rounded-lg bg-red-100 p-2 text-red-600 active:bg-red-200"
+                                  onClick={() => handleDeleteUser(user.id)}
+                                  disabled={deleteUserMutation.isPending}
+                                  className="rounded-lg bg-red-100 p-2 text-red-600 active:bg-red-200 disabled:opacity-50"
                                 >
                                   🗑️
                                 </button>
@@ -533,9 +562,10 @@ export default function AdminPage() {
                       <div className="flex gap-2">
                         <button
                           onClick={handleCreateUser}
-                          className="flex-1 rounded-lg bg-emerald-600 py-2.5 font-semibold text-white active:bg-emerald-700"
+                          disabled={createUserMutation.isPending}
+                          className="flex-1 rounded-lg bg-emerald-600 py-2.5 font-semibold text-white active:bg-emerald-700 disabled:opacity-50"
                         >
-                          Create User
+                          {createUserMutation.isPending ? "Creating..." : "Create User"}
                         </button>
                         <button
                           onClick={() => setShowAddUser(false)}
@@ -608,7 +638,7 @@ export default function AdminPage() {
                     </div>
                     <div className="flex justify-between">
                       <span>Categories</span>
-                      <span className="font-mono">{remarkFields.length}</span>
+                      <span className="font-mono">{localRemarkFields.length}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Status</span>

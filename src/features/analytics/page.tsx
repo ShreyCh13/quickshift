@@ -1,28 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { getSessionHeader, loadSession } from "@/lib/auth";
 import type { Session, VehicleRow } from "@/lib/types";
-import { buildExportUrl, fetchAnalytics } from "./api";
-import { fetchVehicles } from "@/features/vehicles/api";
+import { buildExportUrl } from "./api";
+import { useVehicles, useAnalytics } from "@/hooks/useQueries";
 import * as XLSX from "xlsx";
 
 export default function AnalyticsPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
-  const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
 
-  // Filters
+  // Filters - stored in state so we can build the query
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [brandFilter, setBrandFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "inspections" | "maintenance">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
+  
+  // Applied filters - only update when user clicks Apply
+  const [appliedFilters, setAppliedFilters] = useState<Record<string, unknown>>({});
+
+  // React Query hooks - data is cached automatically
+  const { data: vehiclesData, isLoading: vehiclesLoading } = useVehicles(undefined, 1, 200);
+  const vehicles = (vehiclesData as unknown as { vehicles: VehicleRow[] })?.vehicles || [];
+  
+  // Analytics data with applied filters
+  const { data: analyticsData, isLoading: analyticsLoading, refetch } = useAnalytics(appliedFilters);
+  const data = analyticsData;
+
+  const loading = vehiclesLoading || analyticsLoading;
 
   useEffect(() => {
     const s = loadSession();
@@ -31,28 +41,24 @@ export default function AnalyticsPage() {
       return;
     }
     setSession(s);
-    loadInitial();
   }, [router]);
 
-  async function loadInitial() {
-    const vehiclesData = await fetchVehicles({ page: 1, pageSize: 200 });
-    setVehicles(vehiclesData.vehicles || []);
-    loadAnalytics();
+  // Apply filters - triggers analytics refetch
+  function applyFilters() {
+    const filters: Record<string, unknown> = {};
+    if (brandFilter) filters.brand = brandFilter;
+    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (typeFilter !== "all") filters.type = typeFilter;
+    if (dateFrom) filters.date_from = dateFrom;
+    if (dateTo) filters.date_to = dateTo;
+    if (supplierFilter) filters.supplier = supplierFilter;
+    setAppliedFilters(filters);
   }
 
-  async function loadAnalytics() {
-    setLoading(true);
-    const result = await fetchAnalytics({
-      brand: brandFilter || undefined,
-      vehicle_id: vehicleFilter || undefined,
-      type: typeFilter,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
-      supplier: supplierFilter || undefined,
-    });
-    setData(result);
-    setLoading(false);
-  }
+  // Build initial filters on mount
+  useEffect(() => {
+    applyFilters();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function getExportFilters(type: "inspections" | "maintenance") {
     const filters: Record<string, unknown> = {};
@@ -68,7 +74,6 @@ export default function AnalyticsPage() {
     // If exporting both types, combine into one Excel file with multiple sheets
     if (typeFilter === "all") {
       try {
-        // Fetch both inspections and maintenance
         const inspFilters = getExportFilters("inspections");
         const maintFilters = getExportFilters("maintenance");
         
@@ -90,7 +95,6 @@ export default function AnalyticsPage() {
           return;
         }
 
-        // Read both Excel files
         const [inspBlob, maintBlob] = await Promise.all([
           inspRes.arrayBuffer(),
           maintRes.arrayBuffer()
@@ -99,22 +103,18 @@ export default function AnalyticsPage() {
         const inspWb = XLSX.read(inspBlob, { type: 'array' });
         const maintWb = XLSX.read(maintBlob, { type: 'array' });
 
-        // Create new workbook and combine sheets
         const combinedWb = XLSX.utils.book_new();
         
-        // Add inspections sheet
         if (inspWb.SheetNames.length > 0) {
           const inspSheet = inspWb.Sheets[inspWb.SheetNames[0]];
           XLSX.utils.book_append_sheet(combinedWb, inspSheet, "Inspections");
         }
         
-        // Add maintenance sheet
         if (maintWb.SheetNames.length > 0) {
           const maintSheet = maintWb.Sheets[maintWb.SheetNames[0]];
           XLSX.utils.book_append_sheet(combinedWb, maintSheet, "Maintenance");
         }
 
-        // Generate filename
         const timestamp = new Date().toISOString().split('T')[0];
         let filenameParts = ["analytics"];
         
@@ -139,14 +139,12 @@ export default function AnalyticsPage() {
         filenameParts.push(timestamp);
         const filename = `${filenameParts.join('_')}.xlsx`;
 
-        // Download combined file
         XLSX.writeFile(combinedWb, filename);
       } catch (error) {
         console.error("Export error:", error);
         alert("Export failed");
       }
     } else {
-      // Single type export - use existing logic
       const filters = getExportFilters(typeFilter);
       const exportUrl = buildExportUrl({
         type: typeFilter,
@@ -163,7 +161,6 @@ export default function AnalyticsPage() {
       const link = document.createElement("a");
       link.href = objectUrl;
       
-      // Extract filename from Content-Disposition header, fallback to default
       const disposition = res.headers.get("Content-Disposition");
       const filenameMatch = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
       const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, "") : `${typeFilter}.xlsx`;
@@ -187,7 +184,7 @@ export default function AnalyticsPage() {
           className="rounded-xl bg-white p-4 shadow-sm"
           onSubmit={(e) => {
             e.preventDefault();
-            loadAnalytics();
+            applyFilters();
           }}
         >
           <h3 className="mb-4 text-lg font-bold text-slate-900">Filters</h3>
@@ -228,7 +225,7 @@ export default function AnalyticsPage() {
               <span className="mb-1 block text-sm font-semibold text-slate-700">Type</span>
               <select
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as any)}
+                onChange={(e) => setTypeFilter(e.target.value as "all" | "inspections" | "maintenance")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
               >
                 <option value="all">All (Inspection + Maintenance)</option>
@@ -298,7 +295,7 @@ export default function AnalyticsPage() {
                 <p className="text-sm text-slate-500">No data available</p>
               ) : (
                 <div className="space-y-3">
-                  {filteredMonthly.map((item: any, idx: number) => (
+                  {filteredMonthly.map((item: { month: string; total: number }, idx: number) => (
                     <div key={idx} className="flex items-center justify-between border-b pb-2">
                       <span className="font-medium text-slate-700">{item.month}</span>
                       <span className="text-lg font-bold text-emerald-600">₹{item.total?.toLocaleString()}</span>
@@ -315,7 +312,7 @@ export default function AnalyticsPage() {
                 <p className="text-sm text-slate-500">No data available</p>
               ) : (
                 <div className="space-y-3">
-                  {filteredSuppliers.map((item: any, idx: number) => (
+                  {filteredSuppliers.map((item: { supplier: string; total: number; count: number }, idx: number) => (
                     <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
                       <div>
                         <div className="font-semibold text-slate-900">{item.supplier}</div>
@@ -337,7 +334,7 @@ export default function AnalyticsPage() {
                 <p className="text-sm text-slate-500">No data available</p>
               ) : (
                 <div className="space-y-3">
-                  {filteredVehicles.map((item: any, idx: number) => (
+                  {filteredVehicles.map((item: { vehicle_code: string; brand?: string | null; model?: string | null; inspection_count: number; maintenance_count: number; total: number }, idx: number) => (
                     <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
                       <div>
                         <div className="font-semibold text-slate-900">{item.vehicle_code}</div>
@@ -382,7 +379,7 @@ export default function AnalyticsPage() {
                     <p className="text-sm text-slate-500">No inspections match these filters.</p>
                   ) : (
                     <div className="space-y-2">
-                      {data.inspections.map((item: any) => (
+                      {data?.inspections.map((item: { id: string; vehicles?: { vehicle_code: string; plate_number?: string | null; brand?: string | null; model?: string | null } | null; vehicle_id?: string; created_at: string; odometer_km: number; driver_name?: string | null }) => (
                         <div key={item.id} className="rounded-md border border-blue-100 p-3 text-sm">
                           <div className="font-semibold text-slate-900">
                             {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
@@ -413,7 +410,7 @@ export default function AnalyticsPage() {
                     <p className="text-sm text-slate-500">No maintenance entries match these filters.</p>
                   ) : (
                     <div className="space-y-2">
-                      {data.maintenance.map((item: any) => (
+                      {data?.maintenance.map((item: { id: string; vehicles?: { vehicle_code: string; plate_number?: string | null; brand?: string | null; model?: string | null } | null; vehicle_id?: string; created_at: string; odometer_km: number; supplier_name: string; amount: number }) => (
                         <div key={item.id} className="rounded-md border border-emerald-100 p-3 text-sm">
                           <div className="font-semibold text-slate-900">
                             {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}

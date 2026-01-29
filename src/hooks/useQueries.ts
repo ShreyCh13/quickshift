@@ -9,6 +9,7 @@ import {
   type UseInfiniteQueryOptions,
 } from "@tanstack/react-query";
 import { getSessionHeader } from "@/lib/auth";
+import type { AnalyticsResponse } from "@/lib/api-types";
 
 // ============================================
 // Types
@@ -423,16 +424,17 @@ export function useRemarkFields() {
     queryKey: queryKeys.remarkFields.active(),
     queryFn: () =>
       fetchWithSession<{
-        fields: Array<{
+        remarkFields: Array<{
           id: string;
           key: string;
           label: string;
           sort_order: number;
           is_active: boolean;
+          created_at: string;
         }>;
       }>("/api/config/remarks"),
     staleTime: 10 * 60 * 1000, // 10 minutes
-    select: (data) => data.fields,
+    select: (data) => data.remarkFields,
   });
 }
 
@@ -440,29 +442,105 @@ export function useRemarkFields() {
 // Analytics Hook
 // ============================================
 
-export function useAnalytics(filters?: Record<string, string>) {
-  const params = new URLSearchParams(filters);
+export function useAnalytics(filters?: Record<string, unknown>) {
+  // Build filters param if filters provided
+  let queryString = "";
+  if (filters && Object.keys(filters).length > 0) {
+    const encoded = btoa(JSON.stringify(filters));
+    queryString = `?filters=${encoded}`;
+  }
 
   return useQuery({
     queryKey: queryKeys.analytics.summary(filters),
-    queryFn: () =>
-      fetchWithSession<{
-        summary: {
-          totalVehicles: number;
-          totalInspections: number;
-          totalMaintenance: number;
-          totalMaintenanceCost: number;
-        };
-        byVehicle: Array<{
-          vehicle_id: string;
-          vehicle_code: string;
-          brand: string | null;
-          inspections: number;
-          maintenance: number;
-          cost: number;
-        }>;
-      }>(`/api/analytics?${params}`),
+    queryFn: () => fetchWithSession<AnalyticsResponse>(`/api/analytics${queryString}`),
     staleTime: 5 * 60 * 1000, // 5 minutes
-    enabled: true,
+  });
+}
+
+// ============================================
+// Admin Mutations
+// ============================================
+
+export function useCreateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { username: string; password: string; display_name: string; role: string }) =>
+      fetchWithSession("/api/users", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+    },
+  });
+}
+
+export function useUpdateUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: string; display_name?: string; role?: string; password?: string }) =>
+      fetchWithSession("/api/users", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+    },
+  });
+}
+
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchWithSession("/api/users", {
+        method: "DELETE",
+        body: JSON.stringify({ id }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
+    },
+  });
+}
+
+export function useCreateRemarkField() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { key: string; label: string; sort_order: number; is_active: boolean }) =>
+      fetchWithSession("/api/config/remarks", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
+    },
+  });
+}
+
+export function useUpdateRemarkField() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: string; key: string; label: string; sort_order: number; is_active: boolean }) =>
+      fetchWithSession("/api/config/remarks", {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
+    },
+  });
+}
+
+export function useDeleteRemarkField() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchWithSession("/api/config/remarks", {
+        method: "DELETE",
+        body: JSON.stringify({ id }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
+    },
   });
 }
