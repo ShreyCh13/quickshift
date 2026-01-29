@@ -171,7 +171,7 @@ export async function PUT(req: Request) {
     // Verify inspection exists
     const { data: existing, error: existingError } = await supabase
       .from("inspections")
-      .select("id, created_by, is_deleted")
+      .select("id, created_by, is_deleted, vehicle_id")
       .eq("id", id)
       .maybeSingle();
     
