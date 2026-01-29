@@ -25,7 +25,7 @@ function isEmptyFilters(filters: unknown) {
 
 function generateFileName(type: ExportType, filters: any): string {
   const timestamp = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  let parts = [type];
+  let parts: string[] = [type];
   
   // Add filter information to filename
   if (filters) {
