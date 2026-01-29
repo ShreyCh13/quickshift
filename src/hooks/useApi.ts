@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { getSessionHeader, clearSession } from "@/lib/auth";
 
 interface ApiOptions {
@@ -48,6 +48,14 @@ export function useApi<T>(
   });
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Memoize fetch options to prevent unnecessary re-renders
+  // Serialize to JSON for stable comparison (only re-create if content changes)
+  const fetchOptionsJson = JSON.stringify(fetchOptions);
+  const stableFetchOptions = useMemo(
+    () => JSON.parse(fetchOptionsJson) as RequestInit,
+    [fetchOptionsJson]
+  );
 
   // Cleanup on unmount
   useEffect(() => {
@@ -79,7 +87,7 @@ export function useApi<T>(
         const timeoutId = setTimeout(() => controller.abort(), timeout);
 
         const headers: HeadersInit = {
-          ...fetchOptions.headers,
+          ...stableFetchOptions.headers,
         };
 
         if (authenticated) {
@@ -87,7 +95,7 @@ export function useApi<T>(
         }
 
         const response = await fetch(resolvedUrl, {
-          ...fetchOptions,
+          ...stableFetchOptions,
           headers,
           signal: controller.signal,
         });
@@ -145,7 +153,7 @@ export function useApi<T>(
     });
 
     return null;
-  }, [url, retries, retryDelay, timeout, authenticated, fetchOptions]);
+  }, [url, retries, retryDelay, timeout, authenticated, stableFetchOptions]);
 
   const reset = useCallback(() => {
     if (abortControllerRef.current) {

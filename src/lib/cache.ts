@@ -12,9 +12,45 @@ interface CacheEntry<T> {
 // Global cache store (persists across requests in the same Node process)
 const cache = new Map<string, CacheEntry<unknown>>();
 
+// In-flight requests to prevent duplicate fetches (race condition fix)
+const inFlightRequests = new Map<string, Promise<unknown>>();
+
 // Cache statistics for monitoring
 let cacheHits = 0;
 let cacheMisses = 0;
+
+// Maximum cache size to prevent unbounded growth
+const MAX_CACHE_SIZE = 1000;
+
+// Cleanup interval (5 minutes)
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+
+// Auto-cleanup timer (initialized lazily)
+let cleanupTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Start automatic cache cleanup if not already running
+ */
+function ensureCleanupScheduled(): void {
+  if (cleanupTimer === null) {
+    cleanupTimer = setInterval(() => {
+      cleanupExpired();
+      // Also enforce max size by removing oldest entries
+      if (cache.size > MAX_CACHE_SIZE) {
+        const entries = Array.from(cache.entries());
+        entries.sort((a, b) => a[1].createdAt - b[1].createdAt);
+        const toRemove = entries.slice(0, cache.size - MAX_CACHE_SIZE);
+        for (const [key] of toRemove) {
+          cache.delete(key);
+        }
+      }
+    }, CLEANUP_INTERVAL_MS);
+    // Don't prevent Node from exiting
+    if (cleanupTimer.unref) {
+      cleanupTimer.unref();
+    }
+  }
+}
 
 /**
  * Get cached data by key
@@ -46,6 +82,9 @@ export function getCached<T>(key: string): T | null {
  * @param ttlMs Time to live in milliseconds
  */
 export function setCache<T>(key: string, data: T, ttlMs: number): void {
+  // Ensure cleanup is scheduled
+  ensureCleanupScheduled();
+  
   const now = Date.now();
   cache.set(key, {
     data,
@@ -56,6 +95,7 @@ export function setCache<T>(key: string, data: T, ttlMs: number): void {
 
 /**
  * Get or set cache - helper for common pattern
+ * Prevents duplicate fetches for concurrent requests (race condition safe)
  * @param key Cache key
  * @param ttlMs Time to live in milliseconds
  * @param fetcher Async function to fetch data if not cached
@@ -65,14 +105,32 @@ export async function getOrSetCache<T>(
   ttlMs: number,
   fetcher: () => Promise<T>
 ): Promise<T> {
+  // Check cache first
   const cached = getCached<T>(key);
   if (cached !== null) {
     return cached;
   }
   
-  const data = await fetcher();
-  setCache(key, data, ttlMs);
-  return data;
+  // Check if there's already an in-flight request for this key
+  const inFlight = inFlightRequests.get(key);
+  if (inFlight) {
+    return inFlight as Promise<T>;
+  }
+  
+  // Create new request and track it
+  const request = (async () => {
+    try {
+      const data = await fetcher();
+      setCache(key, data, ttlMs);
+      return data;
+    } finally {
+      // Always remove from in-flight when done
+      inFlightRequests.delete(key);
+    }
+  })();
+  
+  inFlightRequests.set(key, request);
+  return request;
 }
 
 /**

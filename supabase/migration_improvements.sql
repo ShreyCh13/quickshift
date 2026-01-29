@@ -4,8 +4,11 @@
 -- Run this ONCE on your existing database after schema.sql
 -- Includes: performance indexes, soft delete, constraints, triggers, and scalability
 -- WARNING: Backup your data first!
--- Last updated: 2026-01-28
+-- Last updated: 2026-01-29
 -- ===================================================================================
+
+-- Wrap entire migration in a transaction for atomicity
+BEGIN;
 
 -- ============================================================================
 -- STEP 1: Add new columns to existing tables
@@ -29,17 +32,25 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN NULL;
 END $$;
 
--- Add updated_at and is_deleted to inspections
+-- Add updated_at, is_deleted, deleted_at, deleted_by to inspections
 ALTER TABLE public.inspections 
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_by uuid REFERENCES public.users(id),
-  ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
+  ADD COLUMN IF NOT EXISTS deleted_by uuid REFERENCES public.users(id);
 
--- Add updated_at and is_deleted to maintenance
+-- Add updated_at, is_deleted, deleted_at, deleted_by to maintenance
 ALTER TABLE public.maintenance 
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_by uuid REFERENCES public.users(id),
-  ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false;
+  ADD COLUMN IF NOT EXISTS is_deleted boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS deleted_at timestamptz,
+  ADD COLUMN IF NOT EXISTS deleted_by uuid REFERENCES public.users(id);
+
+-- Add updated_at to users table for consistency
+ALTER TABLE public.users
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 -- Set initial values for updated_at (copy from created_at)
 UPDATE public.inspections SET updated_at = created_at WHERE updated_at IS NULL;
@@ -139,6 +150,10 @@ CREATE INDEX IF NOT EXISTS maintenance_created_by_idx ON public.maintenance (cre
 CREATE INDEX IF NOT EXISTS maintenance_amount_idx ON public.maintenance (amount);
 CREATE INDEX IF NOT EXISTS maintenance_is_deleted_idx ON public.maintenance (is_deleted) WHERE is_deleted = false;
 
+-- Odometer indexes for range queries (used in analytics and filtering)
+CREATE INDEX IF NOT EXISTS inspections_odometer_idx ON public.inspections (odometer_km);
+CREATE INDEX IF NOT EXISTS maintenance_odometer_idx ON public.maintenance (odometer_km);
+
 -- ============================================================================
 -- STEP 5: Add triggers for updated_at
 -- ============================================================================
@@ -172,6 +187,13 @@ CREATE TRIGGER inspections_set_updated_at
 DROP TRIGGER IF EXISTS maintenance_set_updated_at ON public.maintenance;
 CREATE TRIGGER maintenance_set_updated_at
   BEFORE UPDATE ON public.maintenance
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+-- Trigger for users
+DROP TRIGGER IF EXISTS users_set_updated_at ON public.users;
+CREATE TRIGGER users_set_updated_at
+  BEFORE UPDATE ON public.users
   FOR EACH ROW
   EXECUTE FUNCTION public.set_updated_at();
 
@@ -335,6 +357,10 @@ END $$;
 -- ============================================================================
 -- MIGRATION COMPLETE
 -- ============================================================================
+
+-- Commit the transaction - all changes are atomic
+COMMIT;
+
 DO $$ 
 BEGIN
   RAISE NOTICE 'QuickShift Migration Complete!';

@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
 import { inspectionsFilterSchema, maintenanceFilterSchema } from "@/lib/validation";
 import { rowsToCsv, rowsToWorkbook, workbookToBuffer } from "@/lib/excel";
+import { checkRateLimit, getClientIp, createRateLimitKey, rateLimitPresets, rateLimitHeaders } from "@/lib/rate-limit";
 
 type ExportType = "vehicles" | "inspections" | "maintenance";
 type ExportFormat = "xlsx" | "csv";
@@ -25,6 +26,21 @@ function isEmptyFilters(filters: unknown) {
 export async function GET(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Rate limit exports to prevent abuse (heavy operation)
+  const clientIp = getClientIp(req);
+  const rateLimitKey = createRateLimitKey(clientIp, "export", session.user.id);
+  const rateLimitResult = checkRateLimit(rateLimitKey, rateLimitPresets.export.limit, rateLimitPresets.export.windowMs);
+  
+  if (!rateLimitResult.allowed) {
+    return NextResponse.json(
+      { error: "Too many export requests. Please try again later." },
+      { 
+        status: 429,
+        headers: rateLimitHeaders(rateLimitResult)
+      }
+    );
+  }
 
   const url = new URL(req.url);
   const type = url.searchParams.get("type") as ExportType | null;

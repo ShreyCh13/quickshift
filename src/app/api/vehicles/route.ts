@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
 import { vehicleSchema } from "@/lib/validation";
 import { PAGE_SIZE_DEFAULT } from "@/lib/constants";
+import { invalidateCache } from "@/lib/cache";
 
 export async function GET(req: Request) {
   try {
@@ -87,6 +88,11 @@ export async function POST(req: Request) {
       console.error("Failed to create vehicle:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+    
+    // Invalidate server-side cache for vehicles and analytics
+    invalidateCache("vehicles:");
+    invalidateCache("analytics:");
+    
     return NextResponse.json({ vehicle: data });
   } catch (err) {
     console.error("Failed to parse vehicle create:", err);
@@ -115,6 +121,11 @@ export async function PUT(req: Request) {
       console.error("Failed to update vehicle:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+    
+    // Invalidate server-side cache for vehicles and analytics
+    invalidateCache("vehicles:");
+    invalidateCache("analytics:");
+    
     return NextResponse.json({ vehicle: data });
   } catch (err) {
     console.error("Failed to parse vehicle update:", err);
@@ -129,23 +140,37 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
-    const { id, soft } = (await req.json()) as { id?: string; soft?: boolean };
+    const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    
     const supabase = getSupabaseAdmin();
-    if (soft !== false) {
-      const { error } = await supabase.from("vehicles").update({ is_active: false }).eq("id", id);
-      if (error) {
-        console.error("Failed to soft delete vehicle:", error);
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-      return NextResponse.json({ success: true, soft: true });
-    }
-    const { error } = await supabase.from("vehicles").delete().eq("id", id);
+    
+    // Check for related records (inspections and maintenance for this vehicle)
+    const [inspectionsCheck, maintenanceCheck] = await Promise.all([
+      supabase.from("inspections").select("id", { count: "exact", head: true }).eq("vehicle_id", id).eq("is_deleted", false),
+      supabase.from("maintenance").select("id", { count: "exact", head: true }).eq("vehicle_id", id).eq("is_deleted", false),
+    ]);
+    
+    const inspectionCount = inspectionsCheck.count || 0;
+    const maintenanceCount = maintenanceCheck.count || 0;
+    
+    // Always soft delete - never hard delete vehicles to preserve data integrity
+    // This prevents accidental data loss and maintains referential integrity
+    const { error } = await supabase.from("vehicles").update({ is_active: false }).eq("id", id);
     if (error) {
-      console.error("Failed to hard delete vehicle:", error);
+      console.error("Failed to soft delete vehicle:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
-    return NextResponse.json({ success: true, soft: false });
+    
+    // Invalidate server-side cache for vehicles and analytics
+    invalidateCache("vehicles:");
+    invalidateCache("analytics:");
+    
+    return NextResponse.json({ 
+      success: true, 
+      soft: true,
+      relatedRecords: { inspectionCount, maintenanceCount }
+    });
   } catch (err) {
     console.error("Failed to parse vehicle delete:", err);
     return NextResponse.json({ error: "Bad request" }, { status: 400 });

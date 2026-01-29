@@ -14,6 +14,39 @@ const rateLimitStore = new Map<string, RateLimitEntry>();
 // Blocked IPs (for repeated violations)
 const blockedIps = new Map<string, number>(); // IP -> blocked until timestamp
 
+// Maximum store size to prevent unbounded growth
+const MAX_STORE_SIZE = 10000;
+
+// Cleanup interval (5 minutes)
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+
+// Auto-cleanup timer (initialized lazily)
+let cleanupTimer: NodeJS.Timeout | null = null;
+
+/**
+ * Start automatic rate limit cleanup if not already running
+ */
+function ensureCleanupScheduled(): void {
+  if (cleanupTimer === null) {
+    cleanupTimer = setInterval(() => {
+      cleanupRateLimits();
+      // Also enforce max size by removing oldest entries
+      if (rateLimitStore.size > MAX_STORE_SIZE) {
+        const entries = Array.from(rateLimitStore.entries());
+        entries.sort((a, b) => a[1].resetAt - b[1].resetAt);
+        const toRemove = entries.slice(0, rateLimitStore.size - MAX_STORE_SIZE);
+        for (const [key] of toRemove) {
+          rateLimitStore.delete(key);
+        }
+      }
+    }, CLEANUP_INTERVAL_MS);
+    // Don't prevent Node from exiting
+    if (cleanupTimer.unref) {
+      cleanupTimer.unref();
+    }
+  }
+}
+
 /**
  * Check rate limit for an identifier (IP, user ID, etc.)
  * @param identifier Unique identifier for the client
@@ -31,6 +64,9 @@ export function checkRateLimit(
   resetAt: number;
   retryAfterMs: number;
 } {
+  // Ensure cleanup is scheduled
+  ensureCleanupScheduled();
+  
   const now = Date.now();
   
   // Check if IP is blocked

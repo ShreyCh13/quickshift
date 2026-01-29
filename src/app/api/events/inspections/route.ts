@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
 import { inspectionCreateSchema, inspectionUpdateSchema, inspectionsFilterSchema } from "@/lib/validation";
 import { PAGE_SIZE_DEFAULT, PAGE_SIZE_MAX } from "@/lib/constants";
+import { invalidateCache, cacheKeys } from "@/lib/cache";
 
 function parseFilters(raw: string | null) {
   if (!raw) return {};
@@ -141,6 +142,10 @@ export async function POST(req: Request) {
       .select("*")
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    
+    // Invalidate server-side cache for analytics
+    invalidateCache("analytics:");
+    
     return NextResponse.json({ inspection: data });
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
@@ -177,6 +182,10 @@ export async function PUT(req: Request) {
       console.error("Failed to update inspection:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+    
+    // Invalidate server-side cache for analytics
+    invalidateCache("analytics:");
+    
     return NextResponse.json({ inspection: data });
   } catch (err) {
     console.error("Failed to parse inspection update:", err);
@@ -194,15 +203,24 @@ export async function DELETE(req: Request) {
     const { id } = (await req.json()) as { id?: string };
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
     const supabase = getSupabaseAdmin();
-    // Soft delete - set is_deleted flag instead of hard delete
+    // Soft delete - set is_deleted flag and track who/when deleted
     const { error } = await supabase
       .from("inspections")
-      .update({ is_deleted: true, updated_by: session.user.id })
+      .update({ 
+        is_deleted: true, 
+        deleted_at: new Date().toISOString(),
+        deleted_by: session.user.id,
+        updated_by: session.user.id 
+      })
       .eq("id", id);
     if (error) {
       console.error("Failed to delete inspection:", error);
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
+    
+    // Invalidate server-side cache for analytics
+    invalidateCache("analytics:");
+    
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Failed to parse inspection delete:", err);

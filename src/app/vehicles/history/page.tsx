@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { clearSession, loadSession, getSessionHeader } from "@/lib/auth";
@@ -48,6 +48,9 @@ function VehicleHistoryContent() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"all" | "inspections" | "maintenance">("all");
 
+  // Track if we've already loaded data to prevent duplicate calls
+  const [hasLoaded, setHasLoaded] = useState(false);
+
   useEffect(() => {
     const sessionData = loadSession();
     if (!sessionData) {
@@ -57,73 +60,95 @@ function VehicleHistoryContent() {
     setSession(sessionData);
   }, [router]);
 
-  const loadVehicleData = useCallback(async () => {
-    if (!vehicleId) {
-      setError("No vehicle specified");
-      setLoading(false);
+  // Load data only once when session is available and vehicleId is set
+  useEffect(() => {
+    // Skip if already loaded, no session, or no vehicleId
+    if (hasLoaded || !session || !vehicleId) {
+      if (!vehicleId && !hasLoaded) {
+        setError("No vehicle specified");
+        setLoading(false);
+      }
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    let isMounted = true;
 
-    try {
-      // Fetch vehicle info
-      const vehicleRes = await fetch(`/api/vehicles?search=${vehicleId}`, {
-        headers: { ...getSessionHeader() },
-      });
-      const vehicleData = await vehicleRes.json();
-      
-      if (vehicleData.error) {
-        if (vehicleData.error === "Unauthorized") {
-          clearSession();
-          router.replace("/login");
+    async function loadData() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        // Fetch vehicle info
+        const vehicleRes = await fetch(`/api/vehicles?search=${vehicleId}`, {
+          headers: { ...getSessionHeader() },
+        });
+        
+        if (!isMounted) return;
+        
+        const vehicleData = await vehicleRes.json();
+        
+        if (vehicleData.error) {
+          if (vehicleData.error === "Unauthorized") {
+            clearSession();
+            router.replace("/login");
+            return;
+          }
+          setError(vehicleData.error);
+          setLoading(false);
           return;
         }
-        setError(vehicleData.error);
+
+        // Find the specific vehicle
+        const foundVehicle = vehicleData.vehicles?.find((v: VehicleRow) => v.id === vehicleId);
+        if (foundVehicle && isMounted) {
+          setVehicle(foundVehicle);
+        }
+
+        // Fetch inspections for this vehicle (with reasonable page size)
+        const inspFilters = btoa(JSON.stringify({ vehicle_id: vehicleId }));
+        const inspRes = await fetch(`/api/events/inspections?filters=${inspFilters}&pageSize=500`, {
+          headers: { ...getSessionHeader() },
+        });
+        
+        if (!isMounted) return;
+        
+        const inspData = await inspRes.json();
+        
+        if (!inspData.error && isMounted) {
+          setInspections(inspData.inspections || []);
+        }
+
+        // Fetch maintenance for this vehicle (with reasonable page size)
+        const maintFilters = btoa(JSON.stringify({ vehicle_id: vehicleId }));
+        const maintRes = await fetch(`/api/events/maintenance?filters=${maintFilters}&pageSize=500`, {
+          headers: { ...getSessionHeader() },
+        });
+        
+        if (!isMounted) return;
+        
+        const maintData = await maintRes.json();
+        
+        if (!maintData.error && isMounted) {
+          setMaintenance(maintData.maintenance || []);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : "Failed to load data");
+        }
+      }
+
+      if (isMounted) {
         setLoading(false);
-        return;
+        setHasLoaded(true);
       }
-
-      // Find the specific vehicle
-      const foundVehicle = vehicleData.vehicles?.find((v: VehicleRow) => v.id === vehicleId);
-      if (foundVehicle) {
-        setVehicle(foundVehicle);
-      }
-
-      // Fetch inspections for this vehicle
-      const inspFilters = btoa(JSON.stringify({ vehicle_id: vehicleId }));
-      const inspRes = await fetch(`/api/events/inspections?filters=${inspFilters}&pageSize=1000`, {
-        headers: { ...getSessionHeader() },
-      });
-      const inspData = await inspRes.json();
-      
-      if (!inspData.error) {
-        setInspections(inspData.inspections || []);
-      }
-
-      // Fetch maintenance for this vehicle
-      const maintFilters = btoa(JSON.stringify({ vehicle_id: vehicleId }));
-      const maintRes = await fetch(`/api/events/maintenance?filters=${maintFilters}&pageSize=1000`, {
-        headers: { ...getSessionHeader() },
-      });
-      const maintData = await maintRes.json();
-      
-      if (!maintData.error) {
-        setMaintenance(maintData.maintenance || []);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load data");
     }
 
-    setLoading(false);
-  }, [vehicleId, router]);
+    loadData();
 
-  useEffect(() => {
-    if (session && vehicleId) {
-      loadVehicleData();
-    }
-  }, [session, vehicleId, loadVehicleData]);
+    return () => {
+      isMounted = false;
+    };
+  }, [session, vehicleId, hasLoaded, router]);
 
   // Combine and sort history items
   const historyItems: HistoryItem[] = [

@@ -1,0 +1,290 @@
+# QuickShift Code Style & Conventions
+
+## TypeScript Rules
+- Always use TypeScript (no .js or .jsx files)
+- Enable strict mode
+- No `any` types - use `unknown` or proper types
+- Use Zod for runtime validation
+- Define interfaces in `src/lib/types.ts`
+
+## React Rules
+- Functional components only (no class components)
+- Use hooks for state and side effects
+- Client components: Add `"use client"` at top
+- Server components: Default, no directive needed
+- Use TanStack React Query for server state
+- Use useState/useReducer for local UI state
+
+## Component Structure
+```typescript
+"use client"; // Only if needed
+
+import { useState } from "react";
+import ComponentA from "./ComponentA";
+import { helperFunction } from "@/lib/utils";
+
+interface Props {
+  prop1: string;
+  prop2?: number;
+}
+
+export default function MyComponent({ prop1, prop2 = 0 }: Props) {
+  const [state, setState] = useState("");
+  
+  // Early returns for loading/error states
+  if (!prop1) return null;
+  
+  return (
+    <div className="space-y-4">
+      {/* JSX */}
+    </div>
+  );
+}
+```
+
+## API Route Structure
+```typescript
+import { NextResponse } from "next/server";
+import { getSupabaseAdmin } from "@/lib/db";
+import { requireSession, requireRole } from "@/lib/auth";
+import { mySchema } from "@/lib/validation";
+
+export async function POST(req: Request) {
+  // 1. Authentication
+  const session = requireSession(req);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  
+  // 2. Authorization
+  if (!requireRole(session, ["admin"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  
+  // 3. Rate limiting (if needed)
+  // const rateLimit = checkRateLimit(...);
+  
+  try {
+    // 4. Validation
+    const input = mySchema.parse(await req.json());
+    
+    // 5. Database operation
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("table")
+      .insert({ ...input, created_by: session.user.id })
+      .select()
+      .single();
+    
+    if (error) {
+      console.error("Failed to insert:", error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    
+    // 6. Cache invalidation
+    // invalidateCache("prefix:");
+    
+    // 7. Success response
+    return NextResponse.json({ data });
+  } catch (err) {
+    console.error("Request failed:", err);
+    return NextResponse.json({ error: "Bad request" }, { status: 400 });
+  }
+}
+```
+
+## Database Rules
+- All tables must have: `id`, `created_at`, `updated_at`, `created_by`, `updated_by`
+- Use soft deletes: `is_deleted`, `deleted_at`, `deleted_by`
+- Always add indexes for foreign keys and `created_at`
+- Use `ON DELETE RESTRICT` for vehicles (prevent accidental deletion)
+- Use `ON DELETE SET NULL` for users (preserve audit trail)
+- Run migrations in transactions
+
+## Naming Conventions
+- Files: kebab-case (`my-component.tsx`)
+- Components: PascalCase (`MyComponent`)
+- Functions: camelCase (`myFunction`)
+- Constants: UPPER_SNAKE_CASE (`MY_CONSTANT`)
+- Database: snake_case (`table_name`, `column_name`)
+- Types/Interfaces: PascalCase (`MyType`)
+
+## Import Order
+1. React/Next.js imports
+2. Third-party libraries
+3. Local components
+4. Local utilities
+5. Types
+
+```typescript
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import MyComponent from "@/components/MyComponent";
+import { myUtil } from "@/lib/utils";
+import type { MyType } from "@/lib/types";
+```
+
+## Styling Rules
+- Use Tailwind CSS utility classes only
+- No custom CSS except in globals.css
+- Mobile-first responsive design (base = mobile, then `sm:`, `md:`, `lg:`)
+- Minimum 44px touch targets (use `py-3` for buttons)
+- Use Tailwind theme colors (blue, emerald, slate, etc.)
+- Group related classes: layout → sizing → spacing → colors → typography
+
+```tsx
+// Good
+<button className="flex items-center justify-center w-full py-3 bg-blue-600 text-white rounded-lg">
+
+// Bad - custom classes, no grouping
+<button className="text-white py-3 custom-btn w-full bg-blue-600">
+```
+
+## Error Handling
+- Always log errors with `console.error`
+- Use try-catch in API routes
+- Return user-friendly error messages
+- Include technical details in logs only
+- Use proper HTTP status codes
+
+```typescript
+try {
+  // Operation
+} catch (err) {
+  console.error("Detailed error for logs:", err);
+  return NextResponse.json(
+    { error: "User-friendly message" },
+    { status: 500 }
+  );
+}
+```
+
+## React Query Patterns
+- Define hooks in `src/hooks/useQueries.ts`
+- Use centralized query keys
+- Invalidate queries after mutations
+- Handle loading and error states
+- Use infinite queries for lists
+
+```typescript
+// In useQueries.ts
+export function useVehicles(filters) {
+  return useQuery({
+    queryKey: ["vehicles", "list", filters],
+    queryFn: () => fetchWithSession("/api/vehicles"),
+    staleTime: 60 * 1000
+  });
+}
+
+export function useCreateVehicle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data) => fetchWithSession("/api/vehicles", {
+      method: "POST",
+      body: JSON.stringify(data)
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["vehicles"] });
+    }
+  });
+}
+```
+
+## Form Handling
+- Use controlled components
+- Validate on submit
+- Show loading state during submission
+- Clear form on success
+- Show error toast on failure
+
+```typescript
+const [form, setForm] = useState({ field: "" });
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setLoading(true);
+  setError(null);
+  
+  try {
+    await createMutation.mutateAsync(form);
+    setForm({ field: "" }); // Reset
+    // Show success toast
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed");
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+## Performance Rules
+- Use React Query caching (staleTime: 30s-5min)
+- Implement pagination (20-50 items per page)
+- Use infinite scroll for lists
+- Batch database queries (no N+1)
+- Add indexes for all queries
+- Invalidate cache after mutations
+
+## Security Rules
+- Never trust client input - always validate
+- Use Zod schemas for validation
+- Hash passwords with PBKDF2
+- Rate limit sensitive endpoints
+- Check auth on every API route
+- Log security events
+- Never return passwords in API responses
+
+## Git Commit Messages
+- Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, etc.
+- Be descriptive: "Add vehicle import pagination" not "Fix bug"
+- Reference issues if applicable
+
+## Documentation
+- Add JSDoc comments for complex functions
+- Update README.md for major changes
+- Document breaking changes
+- Keep ARCHITECTURE.md in sync
+
+## Testing
+- Write tests for critical paths
+- Test edge cases
+- Test error handling
+- Test with invalid data
+- Use `/debug` page for manual testing
+
+## When Adding New Features
+1. Create feature folder in `src/features/`
+2. Add page in `src/app/`
+3. Add API route in `src/app/api/`
+4. Add types to `src/lib/types.ts`
+5. Add validation to `src/lib/validation.ts`
+6. Add React Query hooks to `src/hooks/useQueries.ts`
+7. Update navigation if needed
+8. Test thoroughly
+
+## Code Review Checklist
+- [ ] TypeScript types are correct
+- [ ] Zod validation added
+- [ ] Authentication checked
+- [ ] Rate limiting considered
+- [ ] Database queries optimized (no N+1)
+- [ ] Cache invalidation after mutations
+- [ ] Error handling comprehensive
+- [ ] Loading states shown
+- [ ] Mobile responsive
+- [ ] No console.logs (use console.error for errors)
+- [ ] No hardcoded values (use constants)
+
+## Don'ts
+- ❌ Don't use `any` type
+- ❌ Don't skip validation
+- ❌ Don't skip error handling
+- ❌ Don't hard delete data (use soft delete)
+- ❌ Don't bypass authentication
+- ❌ Don't forget rate limiting on sensitive endpoints
+- ❌ Don't commit secrets or API keys
+- ❌ Don't use custom CSS (use Tailwind)
+- ❌ Don't forget to update types
+- ❌ Don't skip mobile testing
