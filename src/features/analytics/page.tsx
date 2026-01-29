@@ -256,6 +256,11 @@ export default function AnalyticsPage() {
                     <div key={idx} className="flex items-center justify-between rounded-lg bg-slate-50 p-3">
                       <div>
                         <div className="font-semibold text-slate-900">{item.vehicle_code}</div>
+                        {item.brand && item.model && (
+                          <div className="text-sm text-purple-600 font-medium">
+                            {item.brand} {item.model}
+                          </div>
+                        )}
                         <div className="text-xs text-slate-500">
                           {item.inspection_count} inspections • {item.maintenance_count} maintenance
                         </div>
@@ -298,6 +303,11 @@ export default function AnalyticsPage() {
                             {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
                             {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                           </div>
+                          {item.vehicles?.brand && item.vehicles?.model && (
+                            <div className="text-sm text-blue-600 font-medium">
+                              {item.vehicles.brand} {item.vehicles.model}
+                            </div>
+                          )}
                           <div className="text-slate-600">
                             {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
                           </div>
@@ -324,6 +334,11 @@ export default function AnalyticsPage() {
                             {item.vehicles?.vehicle_code || item.vehicle_id?.substring(0, 8)}
                             {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                           </div>
+                          {item.vehicles?.brand && item.vehicles?.model && (
+                            <div className="text-sm text-emerald-600 font-medium">
+                              {item.vehicles.brand} {item.vehicles.model}
+                            </div>
+                          )}
                           <div className="text-slate-600">
                             {new Date(item.created_at).toLocaleString()} • {item.odometer_km} km
                           </div>

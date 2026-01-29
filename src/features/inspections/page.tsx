@@ -269,6 +269,11 @@ export default function InspectionsPage() {
                           {item.vehicles?.vehicle_code || `Vehicle ID: ${item.vehicle_id?.substring(0, 8) || "Unknown"}`}
                           {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                         </div>
+                        {item.vehicles?.brand && item.vehicles?.model && (
+                          <div className="mt-0.5 text-sm text-blue-600 font-medium">
+                            {item.vehicles.brand} {item.vehicles.model}
+                          </div>
+                        )}
                         <div className="mt-0.5 text-sm text-slate-600">
                           {new Date(item.created_at).toLocaleString()} - {item.odometer_km} km
                         </div>

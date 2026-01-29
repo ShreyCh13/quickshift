@@ -92,7 +92,7 @@ export async function GET(req: Request) {
 
   const vehicleData: Record<
     string,
-    { maintenance_count: number; inspection_count: number; total: number; vehicle_code: string; plate_number: string | null }
+    { maintenance_count: number; inspection_count: number; total: number; vehicle_code: string; plate_number: string | null; brand: string | null; model: string | null }
   > = {};
   (vehicles || []).forEach((v) => {
     vehicleData[v.id] = {
@@ -101,6 +101,8 @@ export async function GET(req: Request) {
       total: 0,
       vehicle_code: v.vehicle_code,
       plate_number: v.plate_number || null,
+      brand: v.brand || null,
+      model: v.model || null,
     };
   });
   maintenance.forEach((m) => {
