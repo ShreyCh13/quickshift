@@ -64,9 +64,9 @@ export async function POST(req: Request) {
   try {
     // Fetch data with pagination to handle large datasets
     const [vehicles, inspections, maintenance] = await Promise.all([
-      fetchAllPaginated("vehicles", "created_at"),
-      fetchAllPaginated("inspections", "created_at"),
-      fetchAllPaginated("maintenance", "created_at"),
+      fetchAllPaginated<Record<string, unknown>>("vehicles", "created_at"),
+      fetchAllPaginated<Record<string, unknown>>("inspections", "created_at"),
+      fetchAllPaginated<Record<string, unknown>>("maintenance", "created_at"),
     ]);
 
     if (vehicles.error || inspections.error || maintenance.error) {
