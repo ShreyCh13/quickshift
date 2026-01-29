@@ -175,25 +175,28 @@ function VehicleHistoryContent() {
 
     // Prepare inspections data
     const inspectionRows = inspections.map((i) => ({
-      Type: "Inspection",
-      Date: formatDate(i.created_at),
+      "Date & Time": new Date(i.created_at).toLocaleString("en-IN"),
+      "Vehicle Code": vehicle.vehicle_code,
+      "Plate Number": vehicle.plate_number || "-",
+      "Vehicle Brand": vehicle.brand || "-",
+      "Vehicle Model": vehicle.model || "-",
       "Odometer (km)": i.odometer_km,
-      Driver: i.driver_name || "-",
-      ...Object.entries(i.remarks_json || {}).reduce((acc, [key, value]) => {
-        acc[`Remark: ${key}`] = value;
-        return acc;
-      }, {} as Record<string, string>),
+      "Driver Name": i.driver_name || "-",
+      Remarks: i.remarks_json ? JSON.stringify(i.remarks_json) : "-",
     }));
 
     // Prepare maintenance data
     const maintenanceRows = maintenance.map((m) => ({
-      Type: "Maintenance",
-      Date: formatDate(m.created_at),
+      "Date & Time": new Date(m.created_at).toLocaleString("en-IN"),
+      "Vehicle Code": vehicle.vehicle_code,
+      "Plate Number": vehicle.plate_number || "-",
+      "Vehicle Brand": vehicle.brand || "-",
+      "Vehicle Model": vehicle.model || "-",
       "Odometer (km)": m.odometer_km,
       "Bill Number": m.bill_number,
-      Supplier: m.supplier_name,
-      Amount: m.amount,
-      Remarks: m.remarks,
+      "Supplier Name": m.supplier_name,
+      "Amount (₹)": m.amount,
+      Remarks: m.remarks || "-",
     }));
 
     // Create workbook with multiple sheets

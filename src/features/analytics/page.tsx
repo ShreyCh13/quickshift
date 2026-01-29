@@ -7,6 +7,7 @@ import { getSessionHeader, loadSession } from "@/lib/auth";
 import type { Session, VehicleRow } from "@/lib/types";
 import { buildExportUrl, fetchAnalytics } from "./api";
 import { fetchVehicles } from "@/features/vehicles/api";
+import * as XLSX from "xlsx";
 
 export default function AnalyticsPage() {
   const router = useRouter();
@@ -64,12 +65,91 @@ export default function AnalyticsPage() {
   }
 
   async function handleExport() {
-    const exportTypes: Array<"inspections" | "maintenance"> =
-      typeFilter === "all" ? ["inspections", "maintenance"] : [typeFilter];
-    for (const exportType of exportTypes) {
-      const filters = getExportFilters(exportType);
+    // If exporting both types, combine into one Excel file with multiple sheets
+    if (typeFilter === "all") {
+      try {
+        // Fetch both inspections and maintenance
+        const inspFilters = getExportFilters("inspections");
+        const maintFilters = getExportFilters("maintenance");
+        
+        const [inspRes, maintRes] = await Promise.all([
+          fetch(buildExportUrl({
+            type: "inspections",
+            format: "xlsx",
+            filters: Object.keys(inspFilters).length ? inspFilters : undefined,
+          }), { headers: { ...getSessionHeader() } }),
+          fetch(buildExportUrl({
+            type: "maintenance",
+            format: "xlsx",
+            filters: Object.keys(maintFilters).length ? maintFilters : undefined,
+          }), { headers: { ...getSessionHeader() } })
+        ]);
+
+        if (!inspRes.ok || !maintRes.ok) {
+          alert("Export failed");
+          return;
+        }
+
+        // Read both Excel files
+        const [inspBlob, maintBlob] = await Promise.all([
+          inspRes.arrayBuffer(),
+          maintRes.arrayBuffer()
+        ]);
+
+        const inspWb = XLSX.read(inspBlob, { type: 'array' });
+        const maintWb = XLSX.read(maintBlob, { type: 'array' });
+
+        // Create new workbook and combine sheets
+        const combinedWb = XLSX.utils.book_new();
+        
+        // Add inspections sheet
+        if (inspWb.SheetNames.length > 0) {
+          const inspSheet = inspWb.Sheets[inspWb.SheetNames[0]];
+          XLSX.utils.book_append_sheet(combinedWb, inspSheet, "Inspections");
+        }
+        
+        // Add maintenance sheet
+        if (maintWb.SheetNames.length > 0) {
+          const maintSheet = maintWb.Sheets[maintWb.SheetNames[0]];
+          XLSX.utils.book_append_sheet(combinedWb, maintSheet, "Maintenance");
+        }
+
+        // Generate filename
+        const timestamp = new Date().toISOString().split('T')[0];
+        let filenameParts = ["analytics"];
+        
+        if (vehicleFilter || brandFilter) {
+          const vehicleName = vehicles.find(v => v.id === vehicleFilter)?.vehicle_code || 
+                              (brandFilter ? `brand-${brandFilter}` : '');
+          if (vehicleName) filenameParts.push(vehicleName.replace(/[^a-zA-Z0-9]/g, '_'));
+        }
+        
+        if (dateFrom || dateTo) {
+          const from = dateFrom ? new Date(dateFrom).toISOString().split('T')[0] : '';
+          const to = dateTo ? new Date(dateTo).toISOString().split('T')[0] : '';
+          if (from && to) {
+            filenameParts.push(`${from}_to_${to}`);
+          } else if (from) {
+            filenameParts.push(`from-${from}`);
+          } else if (to) {
+            filenameParts.push(`until-${to}`);
+          }
+        }
+        
+        filenameParts.push(timestamp);
+        const filename = `${filenameParts.join('_')}.xlsx`;
+
+        // Download combined file
+        XLSX.writeFile(combinedWb, filename);
+      } catch (error) {
+        console.error("Export error:", error);
+        alert("Export failed");
+      }
+    } else {
+      // Single type export - use existing logic
+      const filters = getExportFilters(typeFilter);
       const exportUrl = buildExportUrl({
-        type: exportType,
+        type: typeFilter,
         format: "xlsx",
         filters: Object.keys(filters).length ? filters : undefined,
       });
@@ -82,7 +162,12 @@ export default function AnalyticsPage() {
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = `${exportType}.xlsx`;
+      
+      // Extract filename from Content-Disposition header, fallback to default
+      const disposition = res.headers.get("Content-Disposition");
+      const filenameMatch = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, "") : `${typeFilter}.xlsx`;
+      link.download = filename;
       link.click();
       URL.revokeObjectURL(objectUrl);
     }

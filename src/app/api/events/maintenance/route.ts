@@ -47,7 +47,7 @@ export async function GET(req: Request) {
       const { data: vehicles } = await supabase
         .from("vehicles")
         .select("id")
-        .or(`vehicle_code.ilike.${term},plate_number.ilike.${term}`);
+        .or(`vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
       const vehicleIds = (vehicles || []).map((v) => v.id);
       if (vehicleIds.length > 0) {
         query = query.in("vehicle_id", vehicleIds);

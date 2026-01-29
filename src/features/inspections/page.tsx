@@ -133,7 +133,12 @@ export default function InspectionsPage() {
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = "inspections.xlsx";
+    
+    // Extract filename from Content-Disposition header, fallback to default
+    const disposition = res.headers.get("Content-Disposition");
+    const filenameMatch = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, "") : "inspections.xlsx";
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(objectUrl);
   }
