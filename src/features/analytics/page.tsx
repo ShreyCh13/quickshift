@@ -26,10 +26,10 @@ export default function AnalyticsPage() {
 
   // React Query hooks - data is cached automatically
   const { data: vehiclesData, isLoading: vehiclesLoading } = useVehicles(undefined, 1, 200);
-  const vehicles = (vehiclesData as unknown as { vehicles: VehicleRow[] })?.vehicles || [];
+  const vehicles = (vehiclesData as any)?.vehicles || [];
   
   // Analytics data with applied filters
-  const { data: analyticsData, isLoading: analyticsLoading, refetch } = useAnalytics(appliedFilters);
+  const { data: analyticsData, isLoading: analyticsLoading } = useAnalytics(appliedFilters);
   const data = analyticsData;
 
   const loading = vehiclesLoading || analyticsLoading;

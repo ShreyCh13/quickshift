@@ -169,23 +169,23 @@ export async function getVehicleIdsByFilter(
  * Apply vehicle ID filter to a query
  * Helper to simplify query building
  */
-export function applyVehicleFilter<T>(
-  query: T & { in: (col: string, vals: string[]) => T; eq: (col: string, val: string) => T },
+export function applyVehicleFilter<T extends any>(
+  query: T,
   vehicleResult: { ids: string[]; noMatch: boolean }
 ): T | null {
   if (vehicleResult.noMatch) {
     return null; // Signal to return empty results
   }
   
+  let result = query as any;
+  
   if (vehicleResult.ids.length === 1) {
-    return query.eq("vehicle_id", vehicleResult.ids[0]);
+    result = result.eq("vehicle_id", vehicleResult.ids[0]);
+  } else if (vehicleResult.ids.length > 1) {
+    result = result.in("vehicle_id", vehicleResult.ids);
   }
   
-  if (vehicleResult.ids.length > 1) {
-    return query.in("vehicle_id", vehicleResult.ids);
-  }
-  
-  return query; // No filter applied
+  return result as T;
 }
 
 // ============================================================================
@@ -322,12 +322,12 @@ export function paginatedResponse<T, K extends string>(
 /**
  * Apply date range filters to a query
  */
-export function applyDateFilters<T>(
-  query: T & { gte: (col: string, val: string) => T; lte: (col: string, val: string) => T },
+export function applyDateFilters<T extends any>(
+  query: T,
   filters: { date_from?: string; date_to?: string },
   column: string = "created_at"
 ): T {
-  let result = query;
+  let result = query as any;
   
   if (filters.date_from) {
     result = result.gte(column, filters.date_from);
@@ -337,5 +337,5 @@ export function applyDateFilters<T>(
     result = result.lte(column, filters.date_to);
   }
   
-  return result;
+  return result as T;
 }
