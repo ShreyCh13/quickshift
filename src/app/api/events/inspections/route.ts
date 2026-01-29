@@ -107,6 +107,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `Missing remarks: ${missing.join(", ")}` }, { status: 400 });
     }
 
+    // Verify vehicle exists to prevent foreign key violations
+    const { data: vehicle, error: vehicleError } = await supabase
+      .from("vehicles")
+      .select("id, is_active")
+      .eq("id", input.vehicle_id)
+      .maybeSingle();
+    
+    if (vehicleError) {
+      console.error("Failed to verify vehicle:", vehicleError);
+      return NextResponse.json({ error: "Failed to verify vehicle" }, { status: 500 });
+    }
+    
+    if (!vehicle) {
+      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+    }
+    
+    if (!vehicle.is_active) {
+      return NextResponse.json({ error: "Cannot create inspection for inactive vehicle" }, { status: 400 });
+    }
+
     // Insert inspection
     const { data, error } = await supabase
       .from("inspections")
@@ -118,7 +138,15 @@ export async function POST(req: Request) {
       .single();
       
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to create inspection:", error);
+      // Handle specific database errors
+      if (error.code === "23503") { // Foreign key violation
+        return NextResponse.json({ error: "Invalid vehicle reference" }, { status: 400 });
+      }
+      if (error.code === "23502") { // Not null violation
+        return NextResponse.json({ error: "Required fields are missing" }, { status: 400 });
+      }
+      return NextResponse.json({ error: error.message || "Failed to create inspection" }, { status: 400 });
     }
     
     invalidateCache("analytics:");
@@ -140,16 +168,50 @@ export async function PUT(req: Request) {
     const { id, ...updates } = input;
     const supabase = getSupabaseAdmin();
     
+    // Verify inspection exists
+    const { data: existing, error: existingError } = await supabase
+      .from("inspections")
+      .select("id, created_by, is_deleted")
+      .eq("id", id)
+      .maybeSingle();
+    
+    if (existingError) {
+      console.error("Failed to check inspection:", existingError);
+      return NextResponse.json({ error: "Failed to verify inspection" }, { status: 500 });
+    }
+    
+    if (!existing) {
+      return NextResponse.json({ error: "Inspection not found" }, { status: 404 });
+    }
+    
+    if (existing.is_deleted) {
+      return NextResponse.json({ error: "Cannot edit deleted inspection" }, { status: 400 });
+    }
+    
     // Non-admins can only edit their own inspections
-    if (session.user.role !== "admin") {
-      const { data: existing, error: existingError } = await supabase
-        .from("inspections")
-        .select("created_by")
-        .eq("id", id)
-        .single();
-        
-      if (existingError || !existing || existing.created_by !== session.user.id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin" && existing.created_by !== session.user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    
+    // Verify vehicle exists if vehicle_id is being updated
+    if (updates.vehicle_id && updates.vehicle_id !== existing.vehicle_id) {
+      const { data: vehicle, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id, is_active")
+        .eq("id", updates.vehicle_id)
+        .maybeSingle();
+      
+      if (vehicleError) {
+        console.error("Failed to verify vehicle:", vehicleError);
+        return NextResponse.json({ error: "Failed to verify vehicle" }, { status: 500 });
+      }
+      
+      if (!vehicle) {
+        return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+      }
+      
+      if (!vehicle.is_active) {
+        return NextResponse.json({ error: "Cannot assign inspection to inactive vehicle" }, { status: 400 });
       }
     }
     
@@ -163,7 +225,18 @@ export async function PUT(req: Request) {
       
     if (error) {
       console.error("Failed to update inspection:", error);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      // Handle specific database errors
+      if (error.code === "23503") { // Foreign key violation
+        return NextResponse.json({ error: "Invalid vehicle reference" }, { status: 400 });
+      }
+      if (error.code === "23502") { // Not null violation
+        return NextResponse.json({ error: "Required fields cannot be null" }, { status: 400 });
+      }
+      return NextResponse.json({ error: error.message || "Failed to update inspection" }, { status: 400 });
+    }
+    
+    if (!data) {
+      return NextResponse.json({ error: "Inspection not found after update" }, { status: 404 });
     }
     
     invalidateCache("analytics:");

@@ -227,16 +227,14 @@ export default function VehiclesPage() {
           ))}
         </datalist>
 
-        {isAdmin && (
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white active:bg-blue-700"
-          >
-            {showAddForm ? "Cancel" : "+ Add Vehicle"}
-          </button>
-        )}
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white active:bg-blue-700"
+        >
+          {showAddForm ? "Cancel" : "+ Add Vehicle"}
+        </button>
 
-        {showAddForm && isAdmin && (
+        {showAddForm && (
           <div className="rounded-xl border-2 border-blue-200 bg-blue-50 p-4">
             <h3 className="mb-3 text-lg font-bold text-slate-900">Add New Vehicle</h3>
             <div className="space-y-3">
@@ -357,7 +355,7 @@ export default function VehiclesPage() {
           <div className="rounded-xl border-2 border-dashed bg-slate-50 px-6 py-12 text-center">
             <p className="font-medium text-slate-600">No vehicles found</p>
             <p className="mt-1 text-sm text-slate-400">
-              {isAdmin ? "Click 'Add Vehicle' to get started" : "Contact admin to add vehicles"}
+              Click 'Add Vehicle' to get started
             </p>
           </div>
         ) : (

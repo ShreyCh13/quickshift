@@ -95,17 +95,59 @@ export async function POST(req: Request) {
     const input = maintenanceCreateSchema.parse(await req.json());
     const supabase = getSupabaseAdmin();
     
+    // Verify vehicle exists to prevent foreign key violations
+    const { data: vehicle, error: vehicleError } = await supabase
+      .from("vehicles")
+      .select("id, is_active")
+      .eq("id", input.vehicle_id)
+      .maybeSingle();
+    
+    if (vehicleError) {
+      console.error("Failed to verify vehicle:", vehicleError);
+      return NextResponse.json({ error: "Failed to verify vehicle" }, { status: 500 });
+    }
+    
+    if (!vehicle) {
+      return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+    }
+    
+    if (!vehicle.is_active) {
+      return NextResponse.json({ error: "Cannot create maintenance for inactive vehicle" }, { status: 400 });
+    }
+    
+    // Validate required fields
+    if (!input.bill_number || !input.bill_number.trim()) {
+      return NextResponse.json({ error: "Bill number is required" }, { status: 400 });
+    }
+    if (!input.supplier_name || !input.supplier_name.trim()) {
+      return NextResponse.json({ error: "Supplier name is required" }, { status: 400 });
+    }
+    if (input.amount < 0) {
+      return NextResponse.json({ error: "Amount cannot be negative" }, { status: 400 });
+    }
+    
     const { data, error } = await supabase
       .from("maintenance")
       .insert({
         ...input,
+        bill_number: input.bill_number.trim(),
+        supplier_name: input.supplier_name.trim(),
+        remarks: input.remarks?.trim() || null,
         created_by: session.user.id,
       })
       .select("*")
       .single();
       
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error("Failed to create maintenance:", error);
+      // Handle specific database errors
+      if (error.code === "23503") { // Foreign key violation
+        return NextResponse.json({ error: "Invalid vehicle reference" }, { status: 400 });
+      }
+      if (error.code === "23502") { // Not null violation
+        return NextResponse.json({ error: "Required fields are missing" }, { status: 400 });
+      }
+      return NextResponse.json({ error: error.message || "Failed to create maintenance" }, { status: 400 });
     }
     
     invalidateCache("analytics:");
@@ -127,29 +169,91 @@ export async function PUT(req: Request) {
     const { id, ...updates } = input;
     const supabase = getSupabaseAdmin();
     
+    // Verify maintenance record exists
+    const { data: existing, error: existingError } = await supabase
+      .from("maintenance")
+      .select("id, created_by, is_deleted, vehicle_id")
+      .eq("id", id)
+      .maybeSingle();
+    
+    if (existingError) {
+      console.error("Failed to check maintenance:", existingError);
+      return NextResponse.json({ error: "Failed to verify maintenance record" }, { status: 500 });
+    }
+    
+    if (!existing) {
+      return NextResponse.json({ error: "Maintenance record not found" }, { status: 404 });
+    }
+    
+    if (existing.is_deleted) {
+      return NextResponse.json({ error: "Cannot edit deleted maintenance record" }, { status: 400 });
+    }
+    
     // Non-admins can only edit their own records
-    if (session.user.role !== "admin") {
-      const { data: existing, error: existingError } = await supabase
-        .from("maintenance")
-        .select("created_by")
-        .eq("id", id)
-        .single();
-        
-      if (existingError || !existing || existing.created_by !== session.user.id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (session.user.role !== "admin" && existing.created_by !== session.user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    
+    // Verify vehicle exists if vehicle_id is being updated
+    if (updates.vehicle_id && updates.vehicle_id !== existing.vehicle_id) {
+      const { data: vehicle, error: vehicleError } = await supabase
+        .from("vehicles")
+        .select("id, is_active")
+        .eq("id", updates.vehicle_id)
+        .maybeSingle();
+      
+      if (vehicleError) {
+        console.error("Failed to verify vehicle:", vehicleError);
+        return NextResponse.json({ error: "Failed to verify vehicle" }, { status: 500 });
+      }
+      
+      if (!vehicle) {
+        return NextResponse.json({ error: "Vehicle not found" }, { status: 404 });
+      }
+      
+      if (!vehicle.is_active) {
+        return NextResponse.json({ error: "Cannot assign maintenance to inactive vehicle" }, { status: 400 });
       }
     }
     
+    // Validate fields if being updated
+    if (updates.bill_number !== undefined && (!updates.bill_number || !updates.bill_number.trim())) {
+      return NextResponse.json({ error: "Bill number cannot be empty" }, { status: 400 });
+    }
+    if (updates.supplier_name !== undefined && (!updates.supplier_name || !updates.supplier_name.trim())) {
+      return NextResponse.json({ error: "Supplier name cannot be empty" }, { status: 400 });
+    }
+    if (updates.amount !== undefined && updates.amount < 0) {
+      return NextResponse.json({ error: "Amount cannot be negative" }, { status: 400 });
+    }
+    
+    // Prepare update data with trimmed values
+    const updateData: Record<string, unknown> = { ...updates, updated_by: session.user.id };
+    if (updates.bill_number !== undefined) updateData.bill_number = updates.bill_number.trim();
+    if (updates.supplier_name !== undefined) updateData.supplier_name = updates.supplier_name.trim();
+    if (updates.remarks !== undefined) updateData.remarks = updates.remarks?.trim() || null;
+    
     const { data, error } = await supabase
       .from("maintenance")
-      .update({ ...updates, updated_by: session.user.id })
+      .update(updateData)
       .eq("id", id)
       .select("*")
       .single();
       
     if (error) {
       console.error("Failed to update maintenance:", error);
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      // Handle specific database errors
+      if (error.code === "23503") { // Foreign key violation
+        return NextResponse.json({ error: "Invalid vehicle reference" }, { status: 400 });
+      }
+      if (error.code === "23502") { // Not null violation
+        return NextResponse.json({ error: "Required fields cannot be null" }, { status: 400 });
+      }
+      return NextResponse.json({ error: error.message || "Failed to update maintenance" }, { status: 400 });
+    }
+    
+    if (!data) {
+      return NextResponse.json({ error: "Maintenance record not found after update" }, { status: 404 });
     }
     
     invalidateCache("analytics:");
