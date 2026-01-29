@@ -26,7 +26,7 @@ export default function AnalyticsPage() {
 
   // React Query hooks - data is cached automatically
   const { data: vehiclesData, isLoading: vehiclesLoading } = useVehicles(undefined, 1, 200);
-  const vehicles = (vehiclesData as any)?.vehicles || [];
+  const vehicles: VehicleRow[] = (vehiclesData as any)?.vehicles || [];
   
   // Analytics data with applied filters
   const { data: analyticsData, isLoading: analyticsLoading } = useAnalytics(appliedFilters);
