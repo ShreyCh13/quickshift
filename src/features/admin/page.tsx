@@ -50,6 +50,7 @@ export default function AdminPage() {
   });
   const [draggingRemarkId, setDraggingRemarkId] = useState<string | null>(null);
   const [dragOverRemarkId, setDragOverRemarkId] = useState<string | null>(null);
+  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
   const [localRemarkFields, setLocalRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [remarkOrderDirty, setRemarkOrderDirty] = useState(false);
 
@@ -491,26 +492,40 @@ export default function AdminPage() {
                               </div>
                             </div>
                           ) : (
-                            <div className="mt-3 flex items-center gap-2 border-t pt-3">
-                              <div className="flex-1">
-                                <div className="text-xs text-slate-400">Password</div>
-                                <div className="font-mono text-sm text-slate-500">••••••••</div>
-                              </div>
-                              <button
-                                onClick={() => startUserEdit(user)}
-                                className="rounded-lg border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 active:bg-slate-50"
-                              >
-                                Edit
-                              </button>
-                              {!isCurrentUser && (
+                            <div className="mt-3 space-y-3 border-t pt-3">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1">
+                                  <div className="text-xs text-slate-400">Password</div>
+                                  <div className="font-mono text-sm text-slate-600 break-all">
+                                    {visiblePasswordId === user.id 
+                                      ? (user.password || "—") 
+                                      : "••••••••"}
+                                  </div>
+                                </div>
                                 <button
-                                  onClick={() => handleDeleteUser(user.id)}
-                                  disabled={deleteUserMutation.isPending}
-                                  className="rounded-lg bg-red-100 px-3 py-2.5 text-red-600 active:bg-red-200 disabled:opacity-50"
+                                  onClick={() => setVisiblePasswordId(visiblePasswordId === user.id ? null : user.id)}
+                                  className="min-w-[60px] rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm font-semibold text-slate-700 active:bg-slate-50"
                                 >
-                                  🗑️
+                                  {visiblePasswordId === user.id ? "Hide" : "View"}
                                 </button>
-                              )}
+                              </div>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => startUserEdit(user)}
+                                  className="flex-1 rounded-lg border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 active:bg-slate-50"
+                                >
+                                  Edit
+                                </button>
+                                {!isCurrentUser && (
+                                  <button
+                                    onClick={() => handleDeleteUser(user.id)}
+                                    disabled={deleteUserMutation.isPending}
+                                    className="rounded-lg bg-red-100 px-4 py-2.5 text-red-600 active:bg-red-200 disabled:opacity-50"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>

@@ -20,10 +20,10 @@ export async function GET(req: Request) {
   const to = from + pageSize - 1;
 
   const supabase = getSupabaseAdmin();
-  // Don't return passwords to the client - security best practice
+  // Return passwords only for admin users (internal tool requirement)
   const { data, error, count } = await supabase
     .from("users")
-    .select("id, username, display_name, role, created_at", { count: "exact" })
+    .select("id, username, display_name, role, password, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
   if (error) {

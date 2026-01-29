@@ -421,6 +421,7 @@ export function useUsers() {
           username: string;
           display_name: string;
           role: string;
+          password?: string;
           created_at: string;
         }>;
       }>("/api/users"),
