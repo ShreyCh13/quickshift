@@ -165,7 +165,7 @@ export async function PUT(req: Request) {
     // Verify vehicle exists to prevent updating non-existent records
     const { data: existing, error: checkError } = await supabase
       .from("vehicles")
-      .select("id")
+      .select("id, vehicle_code")
       .eq("id", input.id)
       .maybeSingle();
     
