@@ -48,15 +48,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
     }
     
-    // Hash the password before storing
-    const hashedPassword = await hashPassword(input.password);
-    
+    // Store plaintext password for internal admin tool (allows admin to view passwords)
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("users")
       .insert({
         ...input,
-        password: hashedPassword,
+        password: input.password, // Store plaintext for admin viewing
       })
       .select("id, username, display_name, role, created_at")
       .single();
@@ -81,14 +79,14 @@ export async function PUT(req: Request) {
     const input = userUpdateSchema.parse(await req.json());
     const { id, password, ...otherUpdates } = input;
     
-    // If password is being updated, validate and hash it
+    // If password is being updated, validate and store plaintext
     let updates: Record<string, unknown> = { ...otherUpdates };
     if (password) {
       const passwordValidation = validatePasswordStrength(password);
       if (!passwordValidation.valid) {
         return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
       }
-      updates.password = await hashPassword(password);
+      updates.password = password; // Store plaintext for admin viewing
     }
     
     const supabase = getSupabaseAdmin();
