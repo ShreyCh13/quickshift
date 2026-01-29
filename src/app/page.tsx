@@ -31,7 +31,7 @@ export default function Home() {
   if (!session) return null;
 
   return (
-    <MobileShell title="QuickShift">
+    <MobileShell title="State Fleet">
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
         <div className="mx-auto max-w-lg space-y-6">
           {/* Quick Actions */}

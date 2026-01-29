@@ -4,13 +4,13 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
 
 export const metadata: Metadata = {
-  title: "QuickShift",
-  description: "Car inspection and maintenance logging",
+  title: "State Fleet",
+  description: "Car inspection and maintenance logging for State Express",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "QuickShift",
+    title: "State Fleet",
   },
 };
 

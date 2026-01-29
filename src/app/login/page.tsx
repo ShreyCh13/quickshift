@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <div className="w-full max-w-sm space-y-4 rounded-lg bg-white p-5 shadow">
-        <h1 className="text-xl font-semibold text-slate-900">QuickShift Login</h1>
+        <h1 className="text-xl font-semibold text-slate-900">State Fleet Login</h1>
         {error ? <Toast message={error} tone="error" /> : null}
         <form className="space-y-3" onSubmit={onSubmit}>
           <FormField

@@ -1,6 +1,6 @@
-export const APP_NAME = "QuickShift";
+export const APP_NAME = "State Fleet";
 
-export const SESSION_STORAGE_KEY = "qs_session";
+export const SESSION_STORAGE_KEY = "sf_session";
 export const SESSION_TTL_DAYS = 30;
 export const SESSION_TTL_MS = SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 

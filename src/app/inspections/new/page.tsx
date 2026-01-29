@@ -41,7 +41,7 @@ function NewInspectionForm() {
   async function loadData() {
     const [vehiclesRes, remarksRes] = await Promise.all([
       fetchVehicles({ page: 1, pageSize: 200 }),
-      fetch("/api/config/remarks", { headers: { "x-qs-session": JSON.stringify(loadSession()) } }).then((r) =>
+      fetch("/api/config/remarks", { headers: { "x-sf-session": JSON.stringify(loadSession()) } }).then((r) =>
         r.json(),
       ),
     ]);

@@ -1,4 +1,4 @@
-# QuickShift Changelog
+# State Fleet Changelog
 
 ## [1.0.0] - 2026-01-29 - Production Ready Release
 
@@ -161,7 +161,7 @@ COMMIT;
 
 ### File Structure
 ```
-quickshift/
+state-fleet/
 ├── .cursorrules              [NEW] Code style guide
 ├── ARCHITECTURE.md           [NEW] Architecture reference
 ├── CHANGELOG.md              [NEW] Version history

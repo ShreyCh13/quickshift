@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Offline support utilities for QuickShift.
+ * Offline support utilities for State Fleet.
  * Provides IndexedDB caching, retry queue, and online status detection.
  */
 
-const DB_NAME = "quickshift_offline";
+const DB_NAME = "state_fleet_offline";
 const DB_VERSION = 1;
 
 // Store names

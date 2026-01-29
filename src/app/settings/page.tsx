@@ -44,7 +44,7 @@ export default function SettingsPage() {
           <h2 className="mb-4 text-lg font-bold text-slate-900">Platform Links</h2>
           <div className="space-y-3">
             <a
-              href="https://github.com/ShreyCh13/quickshift"
+              href="https://github.com/ShreyCh13/state-fleet"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-between rounded-lg border-2 border-slate-200 p-3 hover:border-slate-400"
@@ -75,7 +75,7 @@ export default function SettingsPage() {
 
         {/* Quick Guide */}
         <div className="mb-6 rounded-xl bg-blue-50 p-6 shadow">
-          <h2 className="mb-4 text-lg font-bold text-slate-900">How to Use QuickShift</h2>
+          <h2 className="mb-4 text-lg font-bold text-slate-900">How to Use State Fleet</h2>
           <div className="space-y-3 text-sm text-slate-700">
             <div>
               <h3 className="font-semibold text-blue-900">📋 Inspections</h3>

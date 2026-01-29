@@ -1,5 +1,5 @@
 -- ===================================================================================
--- QuickShift Database Migration (Consolidated)
+-- State Fleet Database Migration (Consolidated)
 -- ===================================================================================
 -- Run this ONCE on your existing database after schema.sql
 -- Includes: performance indexes, soft delete, constraints, triggers, and scalability
@@ -363,7 +363,7 @@ COMMIT;
 
 DO $$ 
 BEGIN
-  RAISE NOTICE 'QuickShift Migration Complete!';
+  RAISE NOTICE 'State Fleet Migration Complete!';
   RAISE NOTICE 'Run the verification queries below to confirm.';
 END $$;
 

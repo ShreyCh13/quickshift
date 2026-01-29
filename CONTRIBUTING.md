@@ -1,4 +1,4 @@
-# Contributing to QuickShift
+# Contributing to State Fleet
 
 Quick start guide for developers and AI assistants working on this codebase.
 

@@ -1,4 +1,4 @@
--- Supabase schema for QuickShift (car inspection + maintenance logging)
+-- Supabase schema for State Fleet (car inspection + maintenance logging)
 -- Single source of truth for tables + indexes
 
 create extension if not exists "pgcrypto";

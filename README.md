@@ -1,6 +1,6 @@
-# QuickShift - Fleet Management System
+# State Fleet - Fleet Management System
 
-A production-ready, mobile-first fleet vehicle inspection and maintenance tracking application built for scale. Handles hundreds of vehicles with thousands of entries per month.
+A production-ready, mobile-first fleet vehicle inspection and maintenance tracking application built for State Express. Handles hundreds of vehicles with thousands of entries per month.
 
 ---
 
@@ -68,7 +68,7 @@ Supabase Client (PostgreSQL)
 ### File Structure
 
 ```
-quickshift/
+state-fleet/
 ├── src/
 │   ├── app/                          # Next.js App Router
 │   │   ├── (auth)/login/             # Authentication pages
@@ -311,7 +311,7 @@ GROUP BY vehicle_id
 
 ## API Reference
 
-All API routes require authentication via `x-qs-session` header (managed automatically by frontend).
+All API routes require authentication via `x-sf-session` header (managed automatically by frontend).
 
 ### Authentication
 
@@ -962,7 +962,7 @@ BACKUP_SECRET=random-secret-string
 S3_ENDPOINT=https://s3.amazonaws.com
 S3_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE
 S3_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-S3_BUCKET=quickshift-backups
+S3_BUCKET=state-fleet-backups
 S3_REGION=us-east-1
 ```
 

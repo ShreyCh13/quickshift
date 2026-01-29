@@ -1,4 +1,4 @@
-# QuickShift Architecture Reference
+# State Fleet Architecture Reference
 
 Quick reference for AI assistants working on this codebase.
 

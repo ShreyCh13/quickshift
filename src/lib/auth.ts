@@ -2,7 +2,7 @@ import { SESSION_STORAGE_KEY, SESSION_TTL_MS } from "./constants";
 import type { Role, Session } from "./types";
 
 export function parseSessionFromRequest(req: Request): Session | null {
-  const headerSession = req.headers.get("x-qs-session");
+  const headerSession = req.headers.get("x-sf-session");
   if (headerSession) {
     return parseSessionJson(headerSession);
   }
@@ -60,5 +60,5 @@ export function clearSession() {
 export function getSessionHeader(): Record<string, string> {
   const session = loadSession();
   if (!session) return {};
-  return { "x-qs-session": JSON.stringify(session) };
+  return { "x-sf-session": JSON.stringify(session) };
 }

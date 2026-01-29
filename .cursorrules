@@ -1,4 +1,4 @@
-# QuickShift Code Style & Conventions
+# State Fleet Code Style & Conventions
 
 ## TypeScript Rules
 - Always use TypeScript (no .js or .jsx files)
