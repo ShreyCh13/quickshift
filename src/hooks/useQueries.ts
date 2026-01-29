@@ -77,7 +77,7 @@ export const queryKeys = {
   },
   analytics: {
     all: ["analytics"] as const,
-    summary: (filters?: Record<string, string>) => ["analytics", "summary", filters] as const,
+    summary: (filters?: Record<string, unknown>) => ["analytics", "summary", filters] as const,
   },
 };
 
