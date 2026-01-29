@@ -10,6 +10,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -54,14 +55,23 @@ export default function LoginPage() {
             autoComplete="username"
             required
           />
-          <FormField
-            label="Password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
+          <div className="relative">
+            <FormField
+              label="Password"
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-[38px] text-sm font-semibold text-slate-500 active:text-slate-900"
+            >
+              {showPassword ? "Hide" : "View"}
+            </button>
+          </div>
           <button
             type="submit"
             className="h-12 w-full rounded-md bg-slate-900 text-base font-semibold text-white"
