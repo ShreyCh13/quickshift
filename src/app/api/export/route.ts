@@ -113,7 +113,7 @@ async function exportInspections(
   
   let query = supabase
     .from("inspections")
-    .select("vehicle_id, created_at, odometer_km, driver_name, remarks_json, vehicles(vehicle_code, plate_number, brand, model)")
+    .select("vehicle_id, created_at, odometer_km, driver_name, remarks_json, vehicles(vehicle_code, plate_number, brand, model), users!inspections_created_by_fkey(display_name)")
     .eq("is_deleted", false);
   
   // Apply vehicle filter
@@ -138,6 +138,7 @@ async function exportInspections(
   
   return (data || []).map((item: Record<string, unknown>) => {
     const vehicles = item.vehicles as Record<string, unknown> | null;
+    const users = item.users as Record<string, unknown> | null;
     return {
       "Date & Time": item.created_at ? new Date(item.created_at as string).toLocaleString("en-IN") : "",
       "Vehicle Code": vehicles?.vehicle_code || "",
@@ -147,6 +148,7 @@ async function exportInspections(
       "Odometer (km)": item.odometer_km || 0,
       "Driver Name": item.driver_name || "",
       "Remarks": formatRemarks(item.remarks_json),
+      "Added By": users?.display_name || "",
     };
   });
 }
@@ -169,7 +171,7 @@ async function exportMaintenance(
   
   let query = supabase
     .from("maintenance")
-    .select("vehicle_id, created_at, odometer_km, bill_number, supplier_name, amount, remarks, vehicles(vehicle_code, plate_number, brand, model)")
+    .select("vehicle_id, created_at, odometer_km, bill_number, supplier_name, amount, remarks, vehicles(vehicle_code, plate_number, brand, model), users!maintenance_created_by_fkey(display_name)")
     .eq("is_deleted", false);
   
   // Apply vehicle filter
@@ -199,6 +201,7 @@ async function exportMaintenance(
   
   return (data || []).map((item: Record<string, unknown>) => {
     const vehicles = item.vehicles as Record<string, unknown> | null;
+    const users = item.users as Record<string, unknown> | null;
     return {
       "Date & Time": item.created_at ? new Date(item.created_at as string).toLocaleString("en-IN") : "",
       "Vehicle Code": vehicles?.vehicle_code || "",
@@ -210,6 +213,7 @@ async function exportMaintenance(
       "Supplier Name": item.supplier_name || "",
       "Amount (₹)": item.amount || 0,
       "Remarks": item.remarks || "",
+      "Added By": users?.display_name || "",
     };
   });
 }

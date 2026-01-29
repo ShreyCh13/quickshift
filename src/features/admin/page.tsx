@@ -50,7 +50,6 @@ export default function AdminPage() {
   });
   const [draggingRemarkId, setDraggingRemarkId] = useState<string | null>(null);
   const [dragOverRemarkId, setDragOverRemarkId] = useState<string | null>(null);
-  const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
   const [localRemarkFields, setLocalRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [remarkOrderDirty, setRemarkOrderDirty] = useState(false);
 
@@ -81,7 +80,7 @@ export default function AdminPage() {
       [user.id]: {
         display_name: user.display_name,
         role: user.role,
-        password: user.password ?? "",
+        password: "", // Start empty - only set if admin wants to change password
       },
     }));
   }
@@ -464,13 +463,17 @@ export default function AdminPage() {
                                 <option value="admin">Admin</option>
                                 <option value="staff">Staff</option>
                               </select>
-                              <input
-                                type="password"
-                                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                                value={editing.password}
-                                onChange={(e) => updateUserEdit(user.id, { password: e.target.value })}
-                                placeholder="New Password (leave blank to keep)"
-                              />
+                              <div>
+                                <label className="mb-1 block text-xs font-medium text-slate-600">New Password</label>
+                                <input
+                                  type="password"
+                                  className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                                  value={editing.password}
+                                  onChange={(e) => updateUserEdit(user.id, { password: e.target.value })}
+                                  placeholder="Leave blank to keep current"
+                                  autoComplete="new-password"
+                                />
+                              </div>
                               <div className="flex gap-2">
                                 <button
                                   onClick={() => handleSaveUser(user.id)}
@@ -488,22 +491,14 @@ export default function AdminPage() {
                               </div>
                             </div>
                           ) : (
-                            <div className="mt-3 flex gap-2 border-t pt-3">
-                              <div className="flex-1 text-center">
+                            <div className="mt-3 flex items-center gap-2 border-t pt-3">
+                              <div className="flex-1">
                                 <div className="text-xs text-slate-400">Password</div>
-                                <div className="font-mono text-sm text-slate-600">
-                                  {visiblePasswordId === user.id ? (user.password || "—") : "••••••••"}
-                                </div>
+                                <div className="font-mono text-sm text-slate-500">••••••••</div>
                               </div>
                               <button
-                                onClick={() => setVisiblePasswordId(visiblePasswordId === user.id ? null : user.id)}
-                                className="rounded-lg border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 active:bg-slate-50"
-                              >
-                                {visiblePasswordId === user.id ? "Hide" : "View"}
-                              </button>
-                              <button
                                 onClick={() => startUserEdit(user)}
-                                className="rounded-lg border-2 border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 active:bg-slate-50"
+                                className="rounded-lg border-2 border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 active:bg-slate-50"
                               >
                                 Edit
                               </button>
@@ -511,7 +506,7 @@ export default function AdminPage() {
                                 <button
                                   onClick={() => handleDeleteUser(user.id)}
                                   disabled={deleteUserMutation.isPending}
-                                  className="rounded-lg bg-red-100 p-2 text-red-600 active:bg-red-200 disabled:opacity-50"
+                                  className="rounded-lg bg-red-100 px-3 py-2.5 text-red-600 active:bg-red-200 disabled:opacity-50"
                                 >
                                   🗑️
                                 </button>

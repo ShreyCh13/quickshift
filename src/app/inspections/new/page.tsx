@@ -132,6 +132,17 @@ function NewInspectionForm() {
                 onChange={(e) => setFormData({ ...formData, driver_name: e.target.value })}
               />
 
+              <div className="rounded-lg bg-slate-50 p-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm font-semibold text-slate-700">Created By</span>
+                  <div className="flex items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-4 py-3">
+                    <span className="text-lg">👤</span>
+                    <span className="font-medium text-slate-900">{session.user.displayName}</span>
+                    <span className="ml-auto rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500">Auto-filled</span>
+                  </div>
+                </label>
+              </div>
+
               <div className="space-y-3 border-t pt-4">
                 <h3 className="text-lg font-semibold text-slate-900">Inspection Checklist</h3>
                 {remarkFields.map((field) => (

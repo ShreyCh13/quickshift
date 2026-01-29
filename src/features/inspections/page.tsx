@@ -25,6 +25,10 @@ interface InspectionItem {
     brand: string | null;
     model: string | null;
   } | null;
+  users?: {
+    id: string;
+    display_name: string;
+  } | null;
 }
 
 export default function InspectionsPage() {
@@ -184,38 +188,52 @@ export default function InspectionsPage() {
         {/* Filters */}
         <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
           <h3 className="font-bold text-slate-900">Filters</h3>
-          <select
-            value={vehicleFilter}
-            onChange={(e) => setVehicleFilter(e.target.value)}
-            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-          >
-            <option value="">All Vehicles</option>
-            {vehicles.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            value={vehicleSearch}
-            onChange={(e) => setVehicleSearch(e.target.value)}
-            placeholder="Search by vehicle code, plate, or name..."
-            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-          />
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Vehicle</label>
+            <select
+              value={vehicleFilter}
+              onChange={(e) => setVehicleFilter(e.target.value)}
+              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">All Vehicles</option>
+              {vehicles.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Search</label>
             <input
-              type="datetime-local"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+              type="text"
+              value={vehicleSearch}
+              onChange={(e) => setVehicleSearch(e.target.value)}
+              placeholder="Search by vehicle code, plate, or name..."
+              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
             />
-            <input
-              type="datetime-local"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">From Date</label>
+              <input
+                type="date"
+                value={dateFrom ? dateFrom.split('T')[0] : ''}
+                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : '')}
+                className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                placeholder="Start date"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-600">To Date</label>
+              <input
+                type="date"
+                value={dateTo ? dateTo.split('T')[0] : ''}
+                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : '')}
+                className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+                placeholder="End date"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -284,6 +302,9 @@ export default function InspectionsPage() {
                         </div>
                         {item.driver_name && (
                           <div className="mt-0.5 text-xs text-slate-500">Driver: {item.driver_name}</div>
+                        )}
+                        {item.users?.display_name && (
+                          <div className="mt-0.5 text-xs text-slate-500">Added by: {item.users.display_name}</div>
                         )}
                       </div>
                       <span className="text-blue-600">{isExpanded ? "▼" : "▶"}</span>

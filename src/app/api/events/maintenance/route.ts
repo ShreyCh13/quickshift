@@ -30,10 +30,10 @@ export async function GET(req: Request) {
   const supabase = getSupabaseAdmin();
 
   try {
-    // Build base query
+    // Build base query with user join
     let query = supabase
       .from("maintenance")
-      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, amount, remarks, created_by, updated_by, is_deleted", { count: "exact" })
+      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, amount, remarks, created_by, updated_by, is_deleted, users!maintenance_created_by_fkey(id, display_name)", { count: "exact" })
       .eq("is_deleted", false);
 
     // Apply vehicle filters using shared helper

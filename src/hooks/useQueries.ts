@@ -235,11 +235,16 @@ export function useInspectionsInfinite(
           odometer_km: number;
           driver_name: string | null;
           remarks_json: Record<string, string>;
+          created_by?: string;
           vehicles: {
             vehicle_code: string;
             plate_number: string | null;
             brand: string | null;
             model: string | null;
+          } | null;
+          users: {
+            id: string;
+            display_name: string;
           } | null;
         }>;
         total: number;
@@ -330,11 +335,16 @@ export function useMaintenanceInfinite(
           supplier_name: string;
           amount: number;
           remarks: string;
+          created_by?: string;
           vehicles: {
             vehicle_code: string;
             plate_number: string | null;
             brand: string | null;
             model: string | null;
+          } | null;
+          users: {
+            id: string;
+            display_name: string;
           } | null;
         }>;
         total: number;

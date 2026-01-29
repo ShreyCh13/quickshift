@@ -211,14 +211,17 @@ export default function VehiclesPage() {
           </div>
         )}
 
-        <input
-          type="text"
-          list="vehicle-search"
-          placeholder="Search by code, plate, or name..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 text-base focus:border-blue-500 focus:outline-none"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            list="vehicle-search"
+            placeholder="Search by code, plate, or name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 pl-10 text-base focus:border-blue-500 focus:outline-none"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
+        </div>
         <datalist id="vehicle-search">
           {vehicles.map((v) => (
             <option key={v.id} value={v.vehicle_code}>
@@ -367,62 +370,62 @@ export default function VehiclesPage() {
                   v.is_active ? "border-slate-100 active:border-blue-300" : "border-red-200 bg-red-50"
                 }`}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="text-xl font-bold text-slate-900">{v.vehicle_code}</div>
-                    {v.plate_number && (
-                      <div className="mt-1 text-xs font-medium text-slate-500">Plate: {v.plate_number}</div>
-                    )}
-                    <div className="mt-1 flex items-center gap-2 text-sm text-slate-600">
-                      {v.brand && <span className="font-medium text-blue-700">{v.brand}</span>}
-                      {v.model && <span>{v.model}</span>}
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="text-lg font-bold text-slate-900">{v.vehicle_code}</div>
+                      {v.plate_number && (
+                        <div className="text-xs font-medium text-slate-500">Plate: {v.plate_number}</div>
+                      )}
+                      <div className="mt-0.5 flex items-center gap-2 text-sm text-slate-600">
+                        {v.brand && <span className="font-medium text-blue-700">{v.brand}</span>}
+                        {v.model && <span>{v.model}</span>}
+                      </div>
                     </div>
                     {!v.is_active && (
-                      <div className="mt-2 inline-block rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
                         INACTIVE
-                      </div>
+                      </span>
                     )}
                   </div>
-                  <div className="flex flex-col gap-2">
-                    {v.is_active && (
-                      <>
-                        <button
-                          onClick={() => router.push(`/inspections/new?vehicle=${v.id}`)}
-                          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white active:bg-blue-700"
-                        >
-                          Inspect
-                        </button>
-                        <button
-                          onClick={() => router.push(`/maintenance/new?vehicle=${v.id}`)}
-                          className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white active:bg-emerald-700"
-                        >
-                          Maintain
-                        </button>
-                        <button
-                          onClick={() => router.push(`/vehicles/history?vehicle=${v.id}`)}
-                          className="rounded-lg bg-purple-600 px-3 py-2 text-sm font-semibold text-white active:bg-purple-700"
-                        >
-                          History
-                        </button>
-                      </>
-                    )}
-                    {isAdmin && v.is_active && (
-                      <>
-                        <button
-                          onClick={() => startEdit(v)}
-                          className="rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-white active:bg-amber-600"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(v.id, v.vehicle_code)}
-                          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white active:bg-red-700"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </div>
+                  {v.is_active && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => router.push(`/inspections/new?vehicle=${v.id}`)}
+                        className="flex-1 min-w-[70px] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-blue-700"
+                      >
+                        Inspect
+                      </button>
+                      <button
+                        onClick={() => router.push(`/maintenance/new?vehicle=${v.id}`)}
+                        className="flex-1 min-w-[70px] rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-emerald-700"
+                      >
+                        Maintain
+                      </button>
+                      <button
+                        onClick={() => router.push(`/vehicles/history?vehicle=${v.id}`)}
+                        className="flex-1 min-w-[70px] rounded-lg bg-purple-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-purple-700"
+                      >
+                        History
+                      </button>
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => startEdit(v)}
+                            className="flex-1 min-w-[60px] rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-semibold text-white active:bg-amber-600"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(v.id, v.vehicle_code)}
+                            className="flex-1 min-w-[60px] rounded-lg bg-red-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-red-700"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
