@@ -98,7 +98,8 @@ state-fleet/
 │   │   ├── Toast.tsx                 # Notifications
 │   │   ├── Skeleton.tsx              # Loading states
 │   │   ├── ErrorBoundary.tsx         # Error handling
-│   │   └── QueryProvider.tsx         # React Query setup
+│   │   ├── QueryProvider.tsx         # React Query setup
+│   │   └── ServiceWorkerRegistration.tsx # PWA registration
 │   ├── features/                     # Feature modules
 │   │   ├── vehicles/                 # Vehicle feature
 │   │   │   ├── page.tsx              # Main page logic
@@ -109,7 +110,6 @@ state-fleet/
 │   │   ├── analytics/                # Analytics feature
 │   │   └── admin/                    # Admin feature
 │   ├── hooks/                        # React hooks
-│   │   ├── useApi.ts                 # API fetch with retry
 │   │   ├── useQueries.ts             # React Query hooks
 │   │   ├── useDebounce.ts            # Debounce hook
 │   │   ├── useSession.ts             # Session management
@@ -134,6 +134,9 @@ state-fleet/
 │   └── seed.sql                      # Sample data
 ├── data/                             # Sample data files
 │   └── vehicles.csv                  # Vehicle import template
+├── public/                           # Static assets & PWA
+│   ├── manifest.json                 # Web App Manifest
+│   └── sw.js                         # Service Worker
 └── .github/workflows/                # CI/CD
     └── weekly-backup.yml             # Automated backups
 ```
@@ -164,10 +167,9 @@ cp env.example .env.local
 # Edit .env.local with your credentials
 
 # 4. Set up database (in Supabase SQL Editor)
-# Run in order:
-#   a. supabase/schema.sql
-#   b. supabase/migration_improvements.sql
-#   c. (optional) supabase/seed.sql
+#   a. Run supabase/schema.sql to create base tables
+#   b. Run supabase/migration_improvements.sql for production enhancements
+#   c. (optional) Run supabase/seed.sql for sample data
 
 # 5. Start development server
 npm run dev
@@ -683,7 +685,25 @@ await createMutation.mutateAsync({
 
 ---
 
-## Core Systems
+## 7. Core Systems
+
+### 0. PWA & Installability
+
+**Location**: `public/manifest.json`, `public/sw.js`, `src/components/ServiceWorkerRegistration.tsx`
+
+The app is a fully installable Progressive Web App (PWA). 
+
+**Features**:
+- **Manifest**: Defines app identity, theme colors, and icons.
+- **Service Worker**: Enables browser install prompts and basic asset caching.
+- **iOS Support**: Includes Apple-specific meta tags for "Add to Home Screen" functionality.
+
+**⚠️ Note on Icons**:
+You must provide your own icons in the `public/` folder:
+- `icon-192x192.png`
+- `icon-512x512.png`
+
+These are referenced in the `manifest.json`.
 
 ### 1. Authentication System
 
@@ -1193,6 +1213,6 @@ For issues or questions:
 
 ---
 
-**Last Updated**: 2026-01-29  
-**Version**: 1.0.0  
+**Last Updated**: 2026-02-03  
+**Version**: 1.1.0  
 **Status**: Production Ready ✅

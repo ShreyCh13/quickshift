@@ -29,6 +29,7 @@ Quick start guide for developers and AI assistants working on this codebase.
 | Add a new page | `src/app/[name]/page.tsx` |
 | Add a new API endpoint | `src/app/api/[name]/route.ts` |
 | Add a shared component | `src/components/[Name].tsx` |
+| Add PWA files | `public/manifest.json`, `public/sw.js` |
 | Add a feature | `src/features/[name]/` |
 | Add types | `src/lib/types.ts` |
 | Add validation | `src/lib/validation.ts` |

@@ -2,15 +2,16 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import QueryProvider from "@/components/QueryProvider";
+import ServiceWorkerRegistration from "@/components/ServiceWorkerRegistration";
 
 export const metadata: Metadata = {
-  title: "State Fleet",
+  title: "QuickShift State Fleet",
   description: "Car inspection and maintenance logging for State Express",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
-    title: "State Fleet",
+    statusBarStyle: "black-translucent",
+    title: "QuickShift",
   },
 };
 
@@ -30,6 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-slate-50 text-slate-900 antialiased">
+        <ServiceWorkerRegistration />
         <QueryProvider>
           <ErrorBoundary>{children}</ErrorBoundary>
         </QueryProvider>

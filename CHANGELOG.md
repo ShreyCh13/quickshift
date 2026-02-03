@@ -1,5 +1,20 @@
 # State Fleet Changelog
 
+## [1.1.0] - 2026-02-03 - PWA Support & Maintenance
+
+### ✨ Features
+- **PWA "Install" Support**: Added full Progressive Web App support.
+  - Web App Manifest (`manifest.json`) for installability.
+  - Service Worker (`sw.js`) for browser requirements and basic caching.
+  - Automatic "Add to Home Screen" support for iOS and Android.
+  - PWA meta tags and theme color configuration.
+  - Service worker registration component.
+
+### 🧹 Maintenance
+- Updated documentation and READMEs.
+- Cleaned up redundant information and clarified setup steps.
+- Branched cleanup: Deleted `Test-1` branch.
+
 ## [1.0.0] - 2026-01-29 - Production Ready Release
 
 ### 🎉 Major Release: Production-Ready Codebase
@@ -25,7 +40,7 @@ Complete overhaul for production deployment with comprehensive bug fixes, perfor
 - **Fixed infinite loop risk**: Resolved dependency array issue in vehicles/history page
 
 ### API & Backend
-- **Fixed useApi memory leak**: Memoized fetchOptions to prevent excessive re-renders
+- **Added fetchWithSession helper**: Centralized fetch with session headers and error handling
 - **Added pagination to users endpoint**: Prevents loading all users at once
 - **Added rate limiting to export**: Prevents abuse (10 exports per 5 minutes)
 - **Added server cache invalidation**: Mutations now properly invalidate server-side cache
@@ -140,7 +155,7 @@ COMMIT;
 | Cache cleanup | Never (memory leak) | Every 5 minutes | Stable memory |
 | Rate limit cleanup | Never (memory leak) | Every 5 minutes | Stable memory |
 | Race condition | Multiple fetches | Promise dedup | 1 fetch per key |
-| useApi re-renders | Every render | Memoized | Stable |
+| fetchWithSession | Inconsistent headers | Centralized | Reliable |
 | Vehicles history | Potential loop | Fixed deps | Stable |
 
 ---

@@ -3,7 +3,7 @@
 Quick reference for AI assistants working on this codebase.
 
 ## Tech Stack
-- **Frontend**: Next.js 14 App Router, React 19, TypeScript, Tailwind CSS 4
+- **Frontend**: Next.js 14 App Router, React 19, TypeScript, Tailwind CSS 4, PWA (Manifest + SW)
 - **State**: TanStack React Query (server), localStorage (session)
 - **Backend**: Next.js API Routes (serverless)
 - **Database**: Supabase (PostgreSQL 15+)
@@ -17,13 +17,13 @@ src/
 ├── app/                    # Next.js pages + API routes
 │   ├── [page]/page.tsx    # Page UI (client component)
 │   └── api/[route]/route.ts  # API endpoint (server)
-├── components/            # Shared UI (MobileShell, DataTable, etc.)
+├── components/            # Shared UI (MobileShell, DataTable, SW registration, etc.)
 ├── features/              # Feature modules (vehicles, inspections, etc.)
 │   └── [feature]/
 │       ├── page.tsx       # Feature page logic
 │       ├── components.tsx # Feature-specific UI
 │       └── api.ts         # Feature-specific API calls
-├── hooks/                 # React hooks (useQueries, useApi, etc.)
+├── hooks/                 # React hooks (useQueries, useSession, etc.)
 └── lib/                   # Core utilities (auth, cache, db, etc.)
 ```
 
@@ -357,7 +357,7 @@ if (isLoading) {
 - `lib/db.ts`: Supabase client
 - `lib/types.ts`: TypeScript types
 - `hooks/useQueries.ts`: React Query hooks
-- `hooks/useApi.ts`: Fetch with retry
+- `hooks/useQueries.ts`: React Query hooks & fetch helpers
 
 ### Environment Variables
 ```bash
