@@ -13,6 +13,10 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "QuickShift",
   },
+  icons: {
+    icon: "/api/icon?size=512",
+    apple: "/api/icon?size=180",
+  },
 };
 
 export const viewport: Viewport = {
