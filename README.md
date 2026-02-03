@@ -694,16 +694,9 @@ await createMutation.mutateAsync({
 The app is a fully installable Progressive Web App (PWA). 
 
 **Features**:
-- **Manifest**: Defines app identity, theme colors, and icons.
+- **Manifest**: Defines app identity and theme colors.
 - **Service Worker**: Enables browser install prompts and basic asset caching.
 - **iOS Support**: Includes Apple-specific meta tags for "Add to Home Screen" functionality.
-
-**⚠️ Note on Icons**:
-You must provide your own icons in the `public/` folder:
-- `icon-192x192.png`
-- `icon-512x512.png`
-
-These are referenced in the `manifest.json`.
 
 ### 1. Authentication System
 

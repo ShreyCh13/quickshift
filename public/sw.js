@@ -1,8 +1,7 @@
-const CACHE_NAME = 'quickshift-v1';
+const CACHE_NAME = 'quickshift-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/manifest.json',
-  '/globals.css',
 ];
 
 self.addEventListener('install', (event) => {
