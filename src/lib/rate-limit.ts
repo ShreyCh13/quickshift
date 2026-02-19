@@ -200,6 +200,14 @@ export function cleanupRateLimits(): number {
 }
 
 /**
+ * Clear all rate limit entries and unblock all IPs (emergency use only)
+ */
+export function clearAllRateLimits(): void {
+  rateLimitStore.clear();
+  blockedIps.clear();
+}
+
+/**
  * Get rate limit statistics
  */
 export function getRateLimitStats(): {
