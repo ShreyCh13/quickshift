@@ -315,8 +315,8 @@ export default function AdminPage() {
 
   // ---- Checklist item actions ----
   async function handleCreateChecklistItem() {
-    if (!newChecklistItem.item_key.trim() || !newChecklistItem.item_label.trim()) {
-      setError("Item key and label are required");
+    if (!newChecklistItem.item_label.trim()) {
+      setError("Item label is required");
       return;
     }
     setError(null);
@@ -324,9 +324,10 @@ export default function AdminPage() {
       const maxOrder = localChecklistItems.filter((i) => i.category_key === newChecklistItem.category_key).length
         ? Math.max(...localChecklistItems.filter((i) => i.category_key === newChecklistItem.category_key).map((i) => i.sort_order)) + 1
         : 1;
+      const autoKey = newChecklistItem.item_label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
       await createChecklistItemMutation.mutateAsync({
         ...newChecklistItem,
-        item_key: newChecklistItem.item_key.trim().toLowerCase().replace(/\s+/g, "_"),
+        item_key: autoKey,
         item_label: newChecklistItem.item_label.trim(),
         sort_order: maxOrder,
         is_active: true,
@@ -997,12 +998,6 @@ export default function AdminPage() {
                       onChange={(e) => setNewChecklistItem((prev) => ({ ...prev, item_label: e.target.value }))}
                       onKeyDown={(e) => { if (e.key === "Enter") handleCreateChecklistItem(); }}
                     />
-                    <input
-                      className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm font-mono focus:border-blue-500 focus:outline-none"
-                      placeholder="Item key (e.g. ac_compressor) — auto-generated if blank"
-                      value={newChecklistItem.item_key}
-                      onChange={(e) => setNewChecklistItem((prev) => ({ ...prev, item_key: e.target.value }))}
-                    />
                     <button
                       onClick={handleCreateChecklistItem}
                       disabled={createChecklistItemMutation.isPending}
@@ -1100,7 +1095,6 @@ export default function AdminPage() {
                                     <div className="flex items-center justify-between gap-2">
                                       <div className="min-w-0 flex-1">
                                         <div className="truncate text-sm font-medium text-slate-900">{item.item_label}</div>
-                                        <div className="font-mono text-xs text-slate-400">{item.item_key}</div>
                                       </div>
                                       <div className="flex items-center gap-1 shrink-0">
                                         <button
