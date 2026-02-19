@@ -501,15 +501,19 @@ export default function AdminPage() {
                                 <option value="admin">Admin</option>
                                 <option value="staff">Staff</option>
                               </select>
+                              <div className="rounded-lg bg-slate-50 px-3 py-2.5">
+                                <div className="mb-0.5 text-xs font-medium text-slate-500">Current Password</div>
+                                <div className="font-mono text-sm text-slate-800 break-all">{user.password || "—"}</div>
+                              </div>
                               <div>
                                 <label className="mb-1 block text-xs font-medium text-slate-600">New Password (leave blank to keep current)</label>
                                 <input
-                                  type="password"
+                                  type="text"
                                   className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
                                   value={editing.password}
                                   onChange={(e) => updateUserEdit(user.id, { password: e.target.value })}
                                   placeholder="Enter new password..."
-                                  autoComplete="new-password"
+                                  autoComplete="off"
                                 />
                               </div>
                               <div className="flex gap-2">
