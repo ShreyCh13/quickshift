@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { loadSession, getSessionHeader } from "@/lib/auth";
 import MobileShell from "@/components/MobileShell";
@@ -63,7 +63,7 @@ function IconInfo({ className }: { className?: string }) {
 // Config maps
 // ============================================================
 
-const ALERT_ICONS: Record<string, (p: { className?: string }) => JSX.Element> = {
+const ALERT_ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
   INSPECTION_OVERDUE: IconClipboard,
   INSPECTION_CRITICAL: IconClipboard,
   MAINTENANCE_OVERDUE: IconWrench,

@@ -46,6 +46,17 @@ export type RemarkFieldRow = {
   created_at: string;
 };
 
+export type ChecklistItemRow = {
+  id: string;
+  category_key: string;
+  category_label: string;
+  item_key: string;
+  item_label: string;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+};
+
 export type SupplierRow = {
   id: string;
   name: string;

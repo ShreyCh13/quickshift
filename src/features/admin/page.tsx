@@ -6,7 +6,8 @@ import MobileShell from "@/components/MobileShell";
 import FormField from "@/components/FormField";
 import Toast from "@/components/Toast";
 import { loadSession, getSessionHeader } from "@/lib/auth";
-import type { RemarkFieldRow, Session, UserRow } from "@/lib/types";
+import type { ChecklistItemRow, RemarkFieldRow, Session, UserRow } from "@/lib/types";
+import { INSPECTION_CATEGORIES } from "@/lib/constants";
 import {
   useUsers,
   useRemarkFields,
@@ -24,17 +25,25 @@ import {
   useCreateDriver,
   useUpdateDriver,
   useDeleteDriver,
+  useChecklistItems,
+  useCreateChecklistItem,
+  useUpdateChecklistItem,
+  useDeleteChecklistItem,
+  useVehicles,
+  useInspectionsCount,
+  useMaintenanceCount,
 } from "@/hooks/useQueries";
 import { buildExportUrl } from "./api";
 import { ListSkeleton } from "@/components/Skeleton";
 import { generateAppsScript } from "@/lib/SyncSettings";
 
-type TabKey = "users" | "drivers" | "suppliers" | "database" | "sheet";
+type TabKey = "users" | "drivers" | "suppliers" | "database" | "sheet" | "checklist";
 
 const ADMIN_TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "users", label: "Users", icon: "👥" },
   { key: "drivers", label: "Drivers", icon: "🚗" },
   { key: "suppliers", label: "Suppliers", icon: "🏪" },
+  { key: "checklist", label: "Checklist", icon: "📋" },
   { key: "database", label: "Database", icon: "💾" },
   { key: "sheet", label: "Sheet", icon: "📊" },
 ];
@@ -69,11 +78,22 @@ export default function AdminPage() {
   const [scriptCopied, setScriptCopied] = useState(false);
   const [showScriptPreview, setShowScriptPreview] = useState(false);
 
+  // Checklist management state
+  const [localChecklistItems, setLocalChecklistItems] = useState<ChecklistItemRow[]>([]);
+  const [checklistOrderDirty, setChecklistOrderDirty] = useState(false);
+  const [newChecklistItem, setNewChecklistItem] = useState({ category_key: "exterior", category_label: "Exterior Inspection", item_key: "", item_label: "" });
+  const [editChecklistId, setEditChecklistId] = useState<string | null>(null);
+  const [editChecklistLabel, setEditChecklistLabel] = useState("");
+
   // React Query hooks
   const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
   const { data: remarkFieldsData = [], isLoading: remarkFieldsLoading, refetch: refetchRemarkFields } = useRemarkFields();
   const { data: suppliers = [], isLoading: suppliersLoading, refetch: refetchSuppliers } = useSuppliers();
   const { data: drivers = [], isLoading: driversLoading, refetch: refetchDrivers } = useDrivers();
+  const { data: checklistItemsData = [], isLoading: checklistLoading } = useChecklistItems();
+  const { data: vehiclesData } = useVehicles(undefined, 1, 1);
+  const { data: inspectionsCount } = useInspectionsCount();
+  const { data: maintenanceCount } = useMaintenanceCount();
 
   // Mutations
   const createUserMutation = useCreateUser();
@@ -88,6 +108,15 @@ export default function AdminPage() {
   const createDriverMutation = useCreateDriver();
   const updateDriverMutation = useUpdateDriver();
   const deleteDriverMutation = useDeleteDriver();
+  const createChecklistItemMutation = useCreateChecklistItem();
+  const updateChecklistItemMutation = useUpdateChecklistItem();
+  const deleteChecklistItemMutation = useDeleteChecklistItem();
+
+  useEffect(() => {
+    if (checklistItemsData.length > 0 && !checklistOrderDirty) {
+      setLocalChecklistItems(checklistItemsData as ChecklistItemRow[]);
+    }
+  }, [checklistItemsData, checklistOrderDirty]);
 
   useEffect(() => {
     if (remarkFieldsData.length > 0 && !remarkOrderDirty) {
@@ -275,6 +304,58 @@ export default function AdminPage() {
       await deleteRemarkFieldMutation.mutateAsync(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete category");
+    }
+  }
+
+  // ---- Checklist item actions ----
+  async function handleCreateChecklistItem() {
+    if (!newChecklistItem.item_key.trim() || !newChecklistItem.item_label.trim()) {
+      setError("Item key and label are required");
+      return;
+    }
+    setError(null);
+    try {
+      const maxOrder = localChecklistItems.filter((i) => i.category_key === newChecklistItem.category_key).length
+        ? Math.max(...localChecklistItems.filter((i) => i.category_key === newChecklistItem.category_key).map((i) => i.sort_order)) + 1
+        : 1;
+      await createChecklistItemMutation.mutateAsync({
+        ...newChecklistItem,
+        item_key: newChecklistItem.item_key.trim().toLowerCase().replace(/\s+/g, "_"),
+        item_label: newChecklistItem.item_label.trim(),
+        sort_order: maxOrder,
+        is_active: true,
+      });
+      setNewChecklistItem((prev) => ({ ...prev, item_key: "", item_label: "" }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add checklist item");
+    }
+  }
+
+  async function handleToggleChecklistItem(item: ChecklistItemRow) {
+    setError(null);
+    try {
+      await updateChecklistItemMutation.mutateAsync({ ...item, is_active: !item.is_active });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update item");
+    }
+  }
+
+  async function handleSaveChecklistLabel(item: ChecklistItemRow) {
+    if (!editChecklistLabel.trim()) { setError("Label is required"); return; }
+    setError(null);
+    try {
+      await updateChecklistItemMutation.mutateAsync({ ...item, item_label: editChecklistLabel.trim() });
+      setEditChecklistId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update label");
+    }
+  }
+
+  async function handleDeleteChecklistItem(id: string) {
+    try {
+      await deleteChecklistItemMutation.mutateAsync(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to remove item");
     }
   }
 
@@ -745,6 +826,9 @@ export default function AdminPage() {
                     <div className="flex justify-between"><span>Users</span><span className="font-mono">{users.length}</span></div>
                     <div className="flex justify-between"><span>Suppliers</span><span className="font-mono">{suppliers.length}</span></div>
                     <div className="flex justify-between"><span>Drivers</span><span className="font-mono">{drivers.length}</span></div>
+                    <div className="flex justify-between"><span>Cars</span><span className="font-mono">{vehiclesData?.total ?? "—"}</span></div>
+                    <div className="flex justify-between"><span>Inspections</span><span className="font-mono">{inspectionsCount ?? "—"}</span></div>
+                    <div className="flex justify-between"><span>Maintenances</span><span className="font-mono">{maintenanceCount ?? "—"}</span></div>
                     <div className="flex justify-between"><span>Status</span><span className="text-emerald-400">Connected</span></div>
                   </div>
                 </div>

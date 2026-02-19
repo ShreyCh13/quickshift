@@ -88,6 +88,10 @@ export const queryKeys = {
     all: ["analytics"] as const,
     summary: (filters?: Record<string, unknown>) => ["analytics", "summary", filters] as const,
   },
+  checklistItems: {
+    all: ["checklistItems"] as const,
+    list: () => ["checklistItems", "list"] as const,
+  },
 };
 
 // ============================================
@@ -253,6 +257,15 @@ export function useInspectionsInfinite(filters?: InspectionFilters, pageSize = 2
   });
 }
 
+export function useInspectionsCount() {
+  return useQuery({
+    queryKey: [...queryKeys.inspections.all, "count"],
+    queryFn: () =>
+      fetchWithSession<{ total: number }>("/api/events/inspections?page=1&pageSize=1").then((r) => r.total),
+    staleTime: 60 * 1000,
+  });
+}
+
 export function useDeleteInspection() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -315,6 +328,15 @@ export function useMaintenanceInfinite(filters?: MaintenanceFilters, pageSize = 
     initialPageParam: 1,
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
     staleTime: 30 * 1000,
+  });
+}
+
+export function useMaintenanceCount() {
+  return useQuery({
+    queryKey: [...queryKeys.maintenance.all, "count"],
+    queryFn: () =>
+      fetchWithSession<{ total: number }>("/api/events/maintenance?page=1&pageSize=1").then((r) => r.total),
+    staleTime: 60 * 1000,
   });
 }
 
@@ -565,6 +587,64 @@ export function useDeleteRemarkField() {
       fetchWithSession("/api/config/remarks", { method: "DELETE", body: JSON.stringify({ id }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
+    },
+  });
+}
+
+// ============================================
+// Checklist Item Hooks
+// ============================================
+
+export function useChecklistItems() {
+  return useQuery({
+    queryKey: queryKeys.checklistItems.list(),
+    queryFn: () =>
+      fetchWithSession<{
+        checklistItems: Array<{
+          id: string;
+          category_key: string;
+          category_label: string;
+          item_key: string;
+          item_label: string;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+        }>;
+      }>("/api/config/checklist"),
+    staleTime: 10 * 60 * 1000,
+    select: (data) => data.checklistItems,
+  });
+}
+
+export function useCreateChecklistItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { category_key: string; category_label: string; item_key: string; item_label: string; sort_order: number; is_active: boolean }) =>
+      fetchWithSession("/api/config/checklist", { method: "POST", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.checklistItems.all });
+    },
+  });
+}
+
+export function useUpdateChecklistItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: string; category_key: string; category_label: string; item_key: string; item_label: string; sort_order: number; is_active: boolean }) =>
+      fetchWithSession("/api/config/checklist", { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.checklistItems.all });
+    },
+  });
+}
+
+export function useDeleteChecklistItem() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchWithSession("/api/config/checklist", { method: "DELETE", body: JSON.stringify({ id }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.checklistItems.all });
     },
   });
 }
