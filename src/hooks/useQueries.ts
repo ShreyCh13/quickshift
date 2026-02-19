@@ -31,8 +31,12 @@ interface InspectionFilters {
 interface MaintenanceFilters {
   vehicle_id?: string;
   vehicle_query?: string;
+  vehicle_ids?: string[];
   supplier?: string;
+  supplier_names?: string[];
   supplier_invoice_number?: string;
+  filter_mode?: "and" | "or";
+  search?: string;
   date_from?: string;
   date_to?: string;
 }

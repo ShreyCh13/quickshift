@@ -153,15 +153,23 @@ export const inspectionsFilterSchema = z.object({
 });
 
 export const maintenanceFilterSchema = z.object({
+  // Legacy single-value filters (kept for backward compat / exports)
   vehicle_id: z.string().uuid().optional(),
   vehicle_query: z.string().optional(),
   brand: z.string().optional(),
+  supplier: z.string().optional(),
+  supplier_invoice_number: z.string().optional(),
+  // Multi-select filters
+  vehicle_ids: z.array(z.string().uuid()).optional(),
+  supplier_names: z.array(z.string()).optional(),
+  filter_mode: z.enum(["and", "or"]).optional(),
+  // Universal search
+  search: z.string().optional(),
+  // Date / amount ranges
   date_from: z.string().optional(),
   date_to: z.string().optional(),
   odometer_min: z.number().int().optional(),
   odometer_max: z.number().int().optional(),
-  supplier: z.string().optional(),
-  supplier_invoice_number: z.string().optional(),
   amount_min: z.number().optional(),
   amount_max: z.number().optional(),
 });

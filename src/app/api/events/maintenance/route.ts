@@ -36,34 +36,81 @@ export async function GET(req: Request) {
       .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, supplier_invoice_number, amount, remarks, created_by, updated_by, is_deleted, users!maintenance_created_by_fkey(id, display_name)", { count: "exact" })
       .eq("is_deleted", false);
 
-    // Apply vehicle filters using shared helper
-    const vehicleResult = await getVehicleIdsByFilter(supabase, {
-      vehicle_id: filters.vehicle_id,
-      vehicle_query: filters.vehicle_query,
-      brand: filters.brand,
-    });
-    
-    if (vehicleResult.noMatch) {
-      return NextResponse.json(emptyPaginatedResponse("maintenance", pagination));
+    // --- Vehicle filter ---
+    // Multi-select vehicle_ids takes priority over legacy vehicle_id / vehicle_query
+    const hasVehicleIds = filters.vehicle_ids && filters.vehicle_ids.length > 0;
+    let resolvedVehicleIds: string[] = [];
+
+    if (hasVehicleIds) {
+      resolvedVehicleIds = filters.vehicle_ids!;
+    } else if (filters.vehicle_id || filters.vehicle_query || filters.brand) {
+      const vehicleResult = await getVehicleIdsByFilter(supabase, {
+        vehicle_id: filters.vehicle_id,
+        vehicle_query: filters.vehicle_query,
+        brand: filters.brand,
+      });
+      if (vehicleResult.noMatch) {
+        return NextResponse.json(emptyPaginatedResponse("maintenance", pagination));
+      }
+      resolvedVehicleIds = vehicleResult.ids;
     }
-    
-    if (vehicleResult.ids.length === 1) {
-      query = query.eq("vehicle_id", vehicleResult.ids[0]);
-    } else if (vehicleResult.ids.length > 1) {
-      query = query.in("vehicle_id", vehicleResult.ids);
+
+    // --- Supplier filter ---
+    // Multi-select supplier_names takes priority over legacy supplier
+    const hasSupplierNames = filters.supplier_names && filters.supplier_names.length > 0;
+
+    // --- Apply vehicle + supplier with AND / OR logic ---
+    const filterMode = filters.filter_mode ?? "and";
+
+    if (resolvedVehicleIds.length > 0 && hasSupplierNames) {
+      if (filterMode === "or") {
+        // vehicle IN [...] OR supplier_name IN [...]
+        const vehiclePart = resolvedVehicleIds.length === 1
+          ? `vehicle_id.eq.${resolvedVehicleIds[0]}`
+          : `vehicle_id.in.(${resolvedVehicleIds.join(",")})`;
+        const supplierPart = filters.supplier_names!
+          .map((n) => `supplier_name.eq."${n.replace(/"/g, '\\"')}"`)
+          .join(",");
+        query = query.or(`${vehiclePart},${supplierPart}`);
+      } else {
+        // AND mode: apply independently
+        if (resolvedVehicleIds.length === 1) query = query.eq("vehicle_id", resolvedVehicleIds[0]);
+        else query = query.in("vehicle_id", resolvedVehicleIds);
+        query = query.in("supplier_name", filters.supplier_names!);
+      }
+    } else {
+      // Only one side is set
+      if (resolvedVehicleIds.length === 1) query = query.eq("vehicle_id", resolvedVehicleIds[0]);
+      else if (resolvedVehicleIds.length > 1) query = query.in("vehicle_id", resolvedVehicleIds);
+
+      if (hasSupplierNames) query = query.in("supplier_name", filters.supplier_names!);
+      else if (filters.supplier) query = query.ilike("supplier_name", `%${filters.supplier}%`);
     }
 
     // Apply date filters
     query = applyDateFilters(query, filters);
-    
-    // Apply supplier filter
-    if (filters.supplier) {
-      query = query.ilike("supplier_name", `%${filters.supplier}%`);
-    }
 
-    // Apply supplier invoice number filter
+    // Legacy invoice number filter
     if (filters.supplier_invoice_number) {
       query = query.ilike("supplier_invoice_number", `%${filters.supplier_invoice_number}%`);
+    }
+
+    // Universal search — OR across all text fields + matching vehicles
+    if (filters.search?.trim()) {
+      const term = filters.search.trim();
+      const { data: matchingVehicles } = await supabase
+        .from("vehicles")
+        .select("id")
+        .or(
+          `vehicle_code.ilike.%${term}%,plate_number.ilike.%${term}%,brand.ilike.%${term}%,model.ilike.%${term}%`
+        );
+      const vehicleIdPart =
+        matchingVehicles && matchingVehicles.length > 0
+          ? `,vehicle_id.in.(${matchingVehicles.map((v) => v.id).join(",")})`
+          : "";
+      query = query.or(
+        `bill_number.ilike.%${term}%,supplier_name.ilike.%${term}%,supplier_invoice_number.ilike.%${term}%,remarks.ilike.%${term}%${vehicleIdPart}`
+      );
     }
 
     // Execute query

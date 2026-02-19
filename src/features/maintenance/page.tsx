@@ -9,7 +9,141 @@ import { getSessionHeader, loadSession, clearSession } from "@/lib/auth";
 import type { Session } from "@/lib/types";
 import { buildExportUrl, updateMaintenance } from "./api";
 import Skeleton from "@/components/Skeleton";
-import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, queryKeys } from "@/hooks/useQueries";
+import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, useSuppliers, queryKeys } from "@/hooks/useQueries";
+
+// ── Multi-select dropdown ──────────────────────────────────────────────────
+function MultiSelectDropdown({
+  options,
+  selected,
+  onChange,
+  placeholder,
+}: {
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (vals: string[]) => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [open]);
+
+  const filtered = search.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
+
+  function toggle(value: string) {
+    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between rounded-lg border-2 border-slate-200 px-3 py-3 text-base text-left focus:border-emerald-500 focus:outline-none"
+      >
+        <span className={selected.length === 0 ? "text-slate-400" : "font-medium text-slate-900"}>
+          {selected.length === 0 ? placeholder : `${selected.length} selected`}
+        </span>
+        <span className="text-slate-400 text-xs">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {selected.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {selected.map((val) => {
+            const opt = options.find((o) => o.value === val);
+            return (
+              <span
+                key={val}
+                className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+              >
+                {opt?.label ?? val}
+                <button
+                  type="button"
+                  onClick={() => toggle(val)}
+                  className="text-emerald-600 hover:text-emerald-900 leading-none"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border-2 border-slate-200 bg-white shadow-2xl">
+            <div className="border-b border-slate-100 p-2">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search…"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
+                autoFocus
+              />
+            </div>
+            <div className="max-h-52 overflow-y-auto">
+              {filtered.length === 0 ? (
+                <div className="px-3 py-4 text-center text-sm text-slate-400">No options</div>
+              ) : (
+                filtered.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => toggle(option.value)}
+                    className="flex w-full items-center gap-3 px-3 py-2.5 text-sm active:bg-slate-50"
+                  >
+                    <div
+                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 ${
+                        selected.includes(option.value)
+                          ? "border-emerald-500 bg-emerald-500"
+                          : "border-slate-300"
+                      }`}
+                    >
+                      {selected.includes(option.value) && (
+                        <span className="text-[10px] font-bold text-white">✓</span>
+                      )}
+                    </div>
+                    <span className="flex-1 text-left text-slate-800">{option.label}</span>
+                  </button>
+                ))
+              )}
+            </div>
+            <div className="flex gap-2 border-t border-slate-100 p-2">
+              <button
+                type="button"
+                onClick={() => { onChange([]); setSearch(""); }}
+                className="flex-1 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 active:bg-slate-50"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); setSearch(""); }}
+                className="flex-1 rounded-lg bg-emerald-600 py-2 text-xs font-medium text-white active:bg-emerald-700"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 interface MaintenanceItem {
   id: string;
@@ -52,12 +186,15 @@ export default function MaintenancePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
-  const [vehicleFilter, setVehicleFilter] = useState("");
-  const [vehicleSearch, setVehicleSearch] = useState("");
-  const [supplierFilter, setSupplierFilter] = useState("");
-  const [invoiceFilter, setInvoiceFilter] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+
+  // Draft filter state
+  const [draftVehicleIds, setDraftVehicleIds] = useState<string[]>([]);
+  const [draftSupplierNames, setDraftSupplierNames] = useState<string[]>([]);
+  const [draftFilterMode, setDraftFilterMode] = useState<"and" | "or">("and");
+  const [draftSearch, setDraftSearch] = useState("");
+  const [draftDateFrom, setDraftDateFrom] = useState("");
+  const [draftDateTo, setDraftDateTo] = useState("");
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{
@@ -68,20 +205,45 @@ export default function MaintenancePage() {
     amount: number;
     remarks: string;
   }>({ odometer_km: 0, bill_number: "", supplier_name: "", supplier_invoice_number: "", amount: 0, remarks: "" });
-  const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
+
+  // Applied filters (what's actually queried)
+  const [appliedFilters, setAppliedFilters] = useState<{
+    vehicle_ids?: string[];
+    supplier_names?: string[];
+    filter_mode?: "and" | "or";
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+  }>({});
+
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = session?.user.role === "admin";
   const { data: vehicles = [] } = useVehicleDropdown();
+  const { data: suppliers = [] } = useSuppliers();
+
+  const vehicleOptions = useMemo(
+    () =>
+      vehicles.map((v) => ({
+        value: v.id,
+        label: `${v.vehicle_code}${v.brand ? ` · ${v.brand}` : ""}${v.model ? ` ${v.model}` : ""}`,
+      })),
+    [vehicles]
+  );
+
+  const supplierOptions = useMemo(
+    () => suppliers.map((s) => ({ value: s.name, label: s.name })),
+    [suppliers]
+  );
 
   const filters = useMemo(() => {
-    const f: Record<string, string> = {};
-    if (appliedFilters.vehicle_id) f.vehicle_id = appliedFilters.vehicle_id;
-    if (appliedFilters.vehicle_query) f.vehicle_query = appliedFilters.vehicle_query;
+    const f: Record<string, unknown> = {};
+    if (appliedFilters.vehicle_ids?.length) f.vehicle_ids = appliedFilters.vehicle_ids;
+    if (appliedFilters.supplier_names?.length) f.supplier_names = appliedFilters.supplier_names;
+    if (appliedFilters.filter_mode) f.filter_mode = appliedFilters.filter_mode;
+    if (appliedFilters.search) f.search = appliedFilters.search;
     if (appliedFilters.date_from) f.date_from = appliedFilters.date_from;
     if (appliedFilters.date_to) f.date_to = appliedFilters.date_to;
-    if (appliedFilters.supplier) f.supplier = appliedFilters.supplier;
-    if (appliedFilters.supplier_invoice_number) f.supplier_invoice_number = appliedFilters.supplier_invoice_number;
     return Object.keys(f).length > 0 ? f : undefined;
   }, [appliedFilters]);
 
@@ -116,19 +278,26 @@ export default function MaintenancePage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   function handleApplyFilters() {
-    const f: Record<string, string> = {};
-    if (vehicleFilter) f.vehicle_id = vehicleFilter;
-    if (vehicleSearch) f.vehicle_query = vehicleSearch;
-    if (dateFrom) f.date_from = dateFrom;
-    if (dateTo) f.date_to = dateTo;
-    if (supplierFilter) f.supplier = supplierFilter;
-    if (invoiceFilter) f.supplier_invoice_number = invoiceFilter;
-    setAppliedFilters(f);
+    setAppliedFilters({
+      vehicle_ids: draftVehicleIds.length ? draftVehicleIds : undefined,
+      supplier_names: draftSupplierNames.length ? draftSupplierNames : undefined,
+      filter_mode:
+        draftVehicleIds.length > 0 && draftSupplierNames.length > 0
+          ? draftFilterMode
+          : undefined,
+      search: draftSearch.trim() || undefined,
+      date_from: draftDateFrom || undefined,
+      date_to: draftDateTo || undefined,
+    });
   }
 
   function handleClearFilters() {
-    setVehicleFilter(""); setVehicleSearch(""); setSupplierFilter(""); setInvoiceFilter("");
-    setDateFrom(""); setDateTo("");
+    setDraftVehicleIds([]);
+    setDraftSupplierNames([]);
+    setDraftFilterMode("and");
+    setDraftSearch("");
+    setDraftDateFrom("");
+    setDraftDateTo("");
     setAppliedFilters({});
   }
 
@@ -136,7 +305,7 @@ export default function MaintenancePage() {
     const exportUrl = buildExportUrl({
       type: "maintenance",
       format: "xlsx",
-      filters: Object.keys(appliedFilters).length ? appliedFilters : undefined,
+      filters: Object.keys(appliedFilters).length ? (appliedFilters as Record<string, unknown>) : undefined,
     });
     const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
     if (!res.ok) { alert("Export failed"); return; }
@@ -199,64 +368,95 @@ export default function MaintenancePage() {
         <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-900">Filters</h3>
-            {Object.keys(appliedFilters).length > 0 && (
+            {Object.keys(appliedFilters).some((k) => {
+              const v = appliedFilters[k as keyof typeof appliedFilters];
+              return Array.isArray(v) ? v.length > 0 : !!v;
+            }) && (
               <button onClick={handleClearFilters} className="text-xs font-medium text-emerald-600 active:text-emerald-800">
                 Clear all
               </button>
             )}
           </div>
+
+          {/* Vehicle multi-select */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Vehicle</label>
-            <select
-              value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
-              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
-            >
-              <option value="">All Vehicles</option>
-              {vehicles.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
-                </option>
-              ))}
-            </select>
+            <label className="text-xs font-medium text-slate-600">Vehicles</label>
+            <MultiSelectDropdown
+              options={vehicleOptions}
+              selected={draftVehicleIds}
+              onChange={setDraftVehicleIds}
+              placeholder="All vehicles…"
+            />
           </div>
+
+          {/* Supplier multi-select */}
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Search (vehicle code / plate)</label>
+            <label className="text-xs font-medium text-slate-600">Suppliers</label>
+            <MultiSelectDropdown
+              options={supplierOptions}
+              selected={draftSupplierNames}
+              onChange={setDraftSupplierNames}
+              placeholder="All suppliers…"
+            />
+          </div>
+
+          {/* AND / OR toggle — only shown when both are selected */}
+          {draftVehicleIds.length > 0 && draftSupplierNames.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-2">
+              <span className="text-xs text-slate-500">Match mode:</span>
+              <div className="flex overflow-hidden rounded-lg border-2 border-slate-200 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setDraftFilterMode("and")}
+                  className={`px-3 py-1.5 transition ${
+                    draftFilterMode === "and"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white text-slate-600 active:bg-slate-100"
+                  }`}
+                >
+                  AND
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftFilterMode("or")}
+                  className={`px-3 py-1.5 transition ${
+                    draftFilterMode === "or"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-white text-slate-600 active:bg-slate-100"
+                  }`}
+                >
+                  OR
+                </button>
+              </div>
+              <span className="text-xs text-slate-400">
+                {draftFilterMode === "and"
+                  ? "vehicle AND supplier must match"
+                  : "vehicle OR supplier match"}
+              </span>
+            </div>
+          )}
+
+          {/* Universal search */}
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Search</label>
             <input
               type="text"
-              value={vehicleSearch}
-              onChange={(e) => setVehicleSearch(e.target.value)}
-              placeholder="Search vehicles..."
+              value={draftSearch}
+              onChange={(e) => setDraftSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleApplyFilters(); }}
+              placeholder="Search bills, suppliers, invoices, remarks, vehicles…"
               className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Supplier</label>
-            <input
-              type="text"
-              value={supplierFilter}
-              onChange={(e) => setSupplierFilter(e.target.value)}
-              placeholder="Filter by supplier..."
-              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Supplier Invoice No.</label>
-            <input
-              type="text"
-              value={invoiceFilter}
-              onChange={(e) => setInvoiceFilter(e.target.value)}
-              placeholder="Filter by invoice number..."
-              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
+
+          {/* Date range */}
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-600">From</label>
               <input
                 type="date"
-                value={dateFrom ? dateFrom.split("T")[0] : ""}
-                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : "")}
+                value={draftDateFrom ? draftDateFrom.split("T")[0] : ""}
+                onChange={(e) => setDraftDateFrom(e.target.value ? `${e.target.value}T00:00` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
               />
             </div>
@@ -264,12 +464,13 @@ export default function MaintenancePage() {
               <label className="text-xs font-medium text-slate-600">To</label>
               <input
                 type="date"
-                value={dateTo ? dateTo.split("T")[0] : ""}
-                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : "")}
+                value={draftDateTo ? draftDateTo.split("T")[0] : ""}
+                onChange={(e) => setDraftDateTo(e.target.value ? `${e.target.value}T23:59` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={handleApplyFilters}
