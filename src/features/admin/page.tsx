@@ -84,6 +84,9 @@ export default function AdminPage() {
   const [newChecklistItem, setNewChecklistItem] = useState({ category_key: "exterior", category_label: "Exterior Inspection", item_key: "", item_label: "" });
   const [editChecklistId, setEditChecklistId] = useState<string | null>(null);
   const [editChecklistLabel, setEditChecklistLabel] = useState("");
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(
+    new Set(["exterior", "interior", "road_test"])
+  );
 
   // React Query hooks
   const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
@@ -115,6 +118,9 @@ export default function AdminPage() {
   useEffect(() => {
     if (checklistItemsData.length > 0 && !checklistOrderDirty) {
       setLocalChecklistItems(checklistItemsData as ChecklistItemRow[]);
+      // Collapse all categories on first load
+      const keys = new Set((checklistItemsData as ChecklistItemRow[]).map((i) => i.category_key));
+      setCollapsedCategories(keys);
     }
   }, [checklistItemsData, checklistOrderDirty]);
 
@@ -1006,6 +1012,24 @@ export default function AdminPage() {
                     </button>
                   </div>
 
+                  {localChecklistItems.length > 0 && (
+                    <div className="mb-3 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const allKeys = new Set(localChecklistItems.map((i) => i.category_key));
+                          const allCollapsed = allKeys.size === collapsedCategories.size;
+                          setCollapsedCategories(allCollapsed ? new Set() : allKeys);
+                        }}
+                        className="text-xs font-medium text-blue-600 active:text-blue-800"
+                      >
+                        {collapsedCategories.size === new Set(localChecklistItems.map((i) => i.category_key)).size
+                          ? "Expand all"
+                          : "Collapse all"}
+                      </button>
+                    </div>
+                  )}
+
                   {checklistLoading ? (
                     <div className="py-4 text-center text-sm text-slate-400">Loading...</div>
                   ) : localChecklistItems.length === 0 ? (
@@ -1022,13 +1046,31 @@ export default function AdminPage() {
                           }
                           categoryMap.get(item.category_key)!.items.push(item);
                         }
-                        return Array.from(categoryMap.entries()).map(([catKey, { label, items }]) => (
+                        return Array.from(categoryMap.entries()).map(([catKey, { label, items }]) => {
+                          const isCollapsed = collapsedCategories.has(catKey);
+                          return (
                           <div key={catKey} className="overflow-hidden rounded-xl border border-slate-200">
-                            <div className="bg-blue-600 px-4 py-2">
-                              <span className="text-sm font-bold uppercase tracking-wide text-white">{label}</span>
-                              <span className="ml-2 text-xs text-blue-200">{items.filter((i) => i.is_active).length}/{items.length} active</span>
-                            </div>
-                            <div className="divide-y divide-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => setCollapsedCategories((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(catKey)) next.delete(catKey); else next.add(catKey);
+                                return next;
+                              })}
+                              className="flex w-full items-center justify-between bg-blue-600 px-4 py-2.5 active:bg-blue-700"
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold uppercase tracking-wide text-white">{label}</span>
+                                <span className="text-xs text-blue-200">{items.filter((i) => i.is_active).length}/{items.length} active</span>
+                              </div>
+                              <svg
+                                className={`h-4 w-4 text-blue-200 transition-transform duration-200 ${isCollapsed ? "-rotate-90" : ""}`}
+                                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                            {!isCollapsed && <div className="divide-y divide-slate-100">
                               {items.map((item) => (
                                 <div key={item.id} className={`px-3 py-2.5 ${!item.is_active ? "bg-slate-50 opacity-60" : ""}`}>
                                   {editChecklistId === item.id ? (
@@ -1085,9 +1127,10 @@ export default function AdminPage() {
                                   )}
                                 </div>
                               ))}
-                            </div>
+                            </div>}
                           </div>
-                        ));
+                          );
+                        });
                       })()}
                     </div>
                   )}
