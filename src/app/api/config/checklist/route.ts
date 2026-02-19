@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
-import { checklistItemSchema } from "@/lib/validation";
+import { checklistItemConfigSchema as checklistItemSchema } from "@/lib/validation";
 
 export async function GET(req: Request) {
   const session = requireSession(req);

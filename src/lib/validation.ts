@@ -64,7 +64,7 @@ export const remarkFieldSchema = z.object({
   is_active: z.boolean().default(true),
 });
 
-export const checklistItemSchema = z.object({
+export const checklistItemConfigSchema = z.object({
   id: z.string().uuid().optional(),
   category_key: z.string().min(1),
   category_label: z.string().min(1),
@@ -222,7 +222,7 @@ export type UserCreateInput = z.infer<typeof userCreateSchema>;
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
 export type VehicleInput = z.infer<typeof vehicleSchema>;
 export type RemarkFieldInput = z.infer<typeof remarkFieldSchema>;
-export type ChecklistItemInput = z.infer<typeof checklistItemSchema>;
+export type ChecklistItemInput = z.infer<typeof checklistItemConfigSchema>;
 export type SupplierCreateInput = z.infer<typeof supplierCreateSchema>;
 export type DriverCreateInput = z.infer<typeof driverCreateSchema>;
 export type InspectionCreateInput = z.infer<typeof inspectionCreateSchema>;
