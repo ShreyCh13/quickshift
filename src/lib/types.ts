@@ -21,6 +21,7 @@ export type UserRow = {
   role: Role;
   created_at: string;
   updated_at?: string;
+  password_changed_at?: string | null;
 };
 
 export type VehicleRow = {
@@ -45,6 +46,32 @@ export type RemarkFieldRow = {
   created_at: string;
 };
 
+export type SupplierRow = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+};
+
+export type DriverRow = {
+  id: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+};
+
+/** A single item in the inspection checklist */
+export type ChecklistItem = {
+  /** true = passed/OK (ticked); false = issue found (remarks required) */
+  ok: boolean;
+  /** Required when ok = false */
+  remarks: string;
+};
+
 export type InspectionRow = {
   id: string;
   vehicle_id: string;
@@ -52,7 +79,8 @@ export type InspectionRow = {
   updated_at: string;
   odometer_km: number;
   driver_name: string | null;
-  remarks_json: Record<string, string>;
+  /** Keys match INSPECTION_CATEGORIES field keys */
+  remarks_json: Record<string, ChecklistItem>;
   created_by: string;
   updated_by: string | null;
   is_deleted: boolean;
@@ -68,6 +96,7 @@ export type MaintenanceRow = {
   odometer_km: number;
   bill_number: string;
   supplier_name: string;
+  supplier_invoice_number: string;
   amount: number;
   remarks: string;
   created_by: string;

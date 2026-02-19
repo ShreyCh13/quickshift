@@ -5,23 +5,14 @@ import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
-  type UseQueryOptions,
-  type UseInfiniteQueryOptions,
 } from "@tanstack/react-query";
 import { getSessionHeader } from "@/lib/auth";
 import type { AnalyticsResponse } from "@/lib/api-types";
+import type { ChecklistItem } from "@/lib/types";
 
 // ============================================
 // Types
 // ============================================
-
-interface PaginatedResponse<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  hasMore: boolean;
-}
 
 interface VehicleFilters {
   search?: string;
@@ -34,18 +25,20 @@ interface InspectionFilters {
   vehicle_query?: string;
   date_from?: string;
   date_to?: string;
+  driver_name?: string;
 }
 
 interface MaintenanceFilters {
   vehicle_id?: string;
   vehicle_query?: string;
   supplier?: string;
+  supplier_invoice_number?: string;
   date_from?: string;
   date_to?: string;
 }
 
 // ============================================
-// Query Keys (centralized for consistency)
+// Query Keys
 // ============================================
 
 export const queryKeys = {
@@ -75,6 +68,14 @@ export const queryKeys = {
     all: ["remarkFields"] as const,
     active: () => ["remarkFields", "active"] as const,
   },
+  suppliers: {
+    all: ["suppliers"] as const,
+    list: (search?: string) => ["suppliers", "list", search] as const,
+  },
+  drivers: {
+    all: ["drivers"] as const,
+    list: (search?: string) => ["drivers", "list", search] as const,
+  },
   analytics: {
     all: ["analytics"] as const,
     summary: (filters?: Record<string, unknown>) => ["analytics", "summary", filters] as const,
@@ -85,10 +86,7 @@ export const queryKeys = {
 // API Helpers
 // ============================================
 
-async function fetchWithSession<T>(
-  url: string,
-  options?: RequestInit
-): Promise<T> {
+async function fetchWithSession<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -114,15 +112,8 @@ function encodeFilters(filters: object): string {
 // Vehicle Hooks
 // ============================================
 
-export function useVehicles(
-  filters?: VehicleFilters,
-  page = 1,
-  pageSize = 20
-) {
-  const params = new URLSearchParams({
-    page: String(page),
-    pageSize: String(pageSize),
-  });
+export function useVehicles(filters?: VehicleFilters, page = 1, pageSize = 20) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (filters?.search) params.set("search", filters.search);
 
   return useQuery({
@@ -143,7 +134,7 @@ export function useVehicles(
         }>;
         total: number;
       }>(`/api/vehicles?${params}`),
-    staleTime: 60 * 1000, // 1 minute
+    staleTime: 60 * 1000,
   });
 }
 
@@ -154,10 +145,7 @@ export function useVehiclesInfinite(filters?: VehicleFilters, pageSize = 20) {
   return useInfiniteQuery({
     queryKey: [...queryKeys.vehicles.list(filters), "infinite"],
     queryFn: async ({ pageParam = 1 }) => {
-      const params = new URLSearchParams({
-        ...baseParams,
-        page: String(pageParam),
-      });
+      const params = new URLSearchParams({ ...baseParams, page: String(pageParam) });
       const response = await fetchWithSession<{
         vehicles: Array<{
           id: string;
@@ -180,12 +168,11 @@ export function useVehiclesInfinite(filters?: VehicleFilters, pageSize = 20) {
         total: response.total,
         page: pageParam,
         pageSize,
-        hasMore: response.hasMore ?? (pageParam * pageSize < response.total),
+        hasMore: response.hasMore ?? pageParam * pageSize < response.total,
       };
     },
     initialPageParam: 1,
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.page + 1 : undefined,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
     staleTime: 60 * 1000,
   });
 }
@@ -203,7 +190,7 @@ export function useVehicleDropdown() {
           model: string | null;
         }>;
       }>("/api/vehicles?pageSize=200"),
-    staleTime: 5 * 60 * 1000, // 5 minutes - dropdown data changes less frequently
+    staleTime: 5 * 60 * 1000,
     select: (data) => data.vehicles,
   });
 }
@@ -212,19 +199,13 @@ export function useVehicleDropdown() {
 // Inspection Hooks
 // ============================================
 
-export function useInspectionsInfinite(
-  filters?: InspectionFilters,
-  pageSize = 20
-) {
+export function useInspectionsInfinite(filters?: InspectionFilters, pageSize = 20) {
   const filtersParam = filters ? encodeFilters(filters) : "";
 
   return useInfiniteQuery({
     queryKey: queryKeys.inspections.infinite(filters),
     queryFn: async ({ pageParam = 1 }) => {
-      const params = new URLSearchParams({
-        page: String(pageParam),
-        pageSize: String(pageSize),
-      });
+      const params = new URLSearchParams({ page: String(pageParam), pageSize: String(pageSize) });
       if (filtersParam) params.set("filters", filtersParam);
 
       const response = await fetchWithSession<{
@@ -234,7 +215,7 @@ export function useInspectionsInfinite(
           created_at: string;
           odometer_km: number;
           driver_name: string | null;
-          remarks_json: Record<string, string>;
+          remarks_json: Record<string, ChecklistItem>;
           created_by?: string;
           vehicles: {
             vehicle_code: string;
@@ -242,10 +223,7 @@ export function useInspectionsInfinite(
             brand: string | null;
             model: string | null;
           } | null;
-          users: {
-            id: string;
-            display_name: string;
-          } | null;
+          users: { id: string; display_name: string } | null;
         }>;
         total: number;
         page: number;
@@ -262,43 +240,16 @@ export function useInspectionsInfinite(
       };
     },
     initialPageParam: 1,
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.page + 1 : undefined,
-    staleTime: 30 * 1000, // 30 seconds
-  });
-}
-
-export function useCreateInspection() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (data: {
-      vehicle_id: string;
-      odometer_km: number;
-      driver_name?: string;
-      remarks_json: Record<string, string>;
-    }) =>
-      fetchWithSession("/api/events/inspections", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
-    onSuccess: () => {
-      // Invalidate all inspection queries to refetch fresh data
-      queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
-    },
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
+    staleTime: 30 * 1000,
   });
 }
 
 export function useDeleteInspection() {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: (id: string) =>
-      fetchWithSession("/api/events/inspections", {
-        method: "DELETE",
-        body: JSON.stringify({ id }),
-      }),
+      fetchWithSession("/api/events/inspections", { method: "DELETE", body: JSON.stringify({ id }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
@@ -310,19 +261,13 @@ export function useDeleteInspection() {
 // Maintenance Hooks
 // ============================================
 
-export function useMaintenanceInfinite(
-  filters?: MaintenanceFilters,
-  pageSize = 20
-) {
+export function useMaintenanceInfinite(filters?: MaintenanceFilters, pageSize = 20) {
   const filtersParam = filters ? encodeFilters(filters) : "";
 
   return useInfiniteQuery({
     queryKey: queryKeys.maintenance.infinite(filters),
     queryFn: async ({ pageParam = 1 }) => {
-      const params = new URLSearchParams({
-        page: String(pageParam),
-        pageSize: String(pageSize),
-      });
+      const params = new URLSearchParams({ page: String(pageParam), pageSize: String(pageSize) });
       if (filtersParam) params.set("filters", filtersParam);
 
       const response = await fetchWithSession<{
@@ -333,6 +278,7 @@ export function useMaintenanceInfinite(
           odometer_km: number;
           bill_number: string;
           supplier_name: string;
+          supplier_invoice_number: string;
           amount: number;
           remarks: string;
           created_by?: string;
@@ -342,10 +288,7 @@ export function useMaintenanceInfinite(
             brand: string | null;
             model: string | null;
           } | null;
-          users: {
-            id: string;
-            display_name: string;
-          } | null;
+          users: { id: string; display_name: string } | null;
         }>;
         total: number;
         page: number;
@@ -362,28 +305,16 @@ export function useMaintenanceInfinite(
       };
     },
     initialPageParam: 1,
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.page + 1 : undefined,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.page + 1 : undefined),
     staleTime: 30 * 1000,
   });
 }
 
-export function useCreateMaintenance() {
+export function useDeleteMaintenance() {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: (data: {
-      vehicle_id: string;
-      odometer_km: number;
-      bill_number: string;
-      supplier_name: string;
-      amount: number;
-      remarks: string;
-    }) =>
-      fetchWithSession("/api/events/maintenance", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+    mutationFn: (id: string) =>
+      fetchWithSession("/api/events/maintenance", { method: "DELETE", body: JSON.stringify({ id }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
@@ -391,18 +322,90 @@ export function useCreateMaintenance() {
   });
 }
 
-export function useDeleteMaintenance() {
-  const queryClient = useQueryClient();
+// ============================================
+// Supplier Hooks
+// ============================================
 
+export function useSuppliers(search?: string) {
+  return useQuery({
+    queryKey: queryKeys.suppliers.list(search),
+    queryFn: () => {
+      const params = new URLSearchParams({ active: "true" });
+      if (search) params.set("search", search);
+      return fetchWithSession<{ suppliers: Array<{ id: string; name: string; is_active: boolean }> }>(
+        `/api/suppliers?${params}`
+      );
+    },
+    staleTime: 2 * 60 * 1000,
+    select: (data) => data.suppliers,
+  });
+}
+
+export function useCreateSupplier() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      fetchWithSession("/api/events/maintenance", {
-        method: "DELETE",
-        body: JSON.stringify({ id }),
+    mutationFn: (name: string) =>
+      fetchWithSession<{ supplier: { id: string; name: string } }>("/api/suppliers", {
+        method: "POST",
+        body: JSON.stringify({ name }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.analytics.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all });
+    },
+  });
+}
+
+export function useDeleteSupplier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchWithSession("/api/suppliers", { method: "DELETE", body: JSON.stringify({ id }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all });
+    },
+  });
+}
+
+// ============================================
+// Driver Hooks
+// ============================================
+
+export function useDrivers(search?: string) {
+  return useQuery({
+    queryKey: queryKeys.drivers.list(search),
+    queryFn: () => {
+      const params = new URLSearchParams({ active: "true" });
+      if (search) params.set("search", search);
+      return fetchWithSession<{ drivers: Array<{ id: string; name: string; is_active: boolean }> }>(
+        `/api/drivers?${params}`
+      );
+    },
+    staleTime: 2 * 60 * 1000,
+    select: (data) => data.drivers,
+  });
+}
+
+export function useCreateDriver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      fetchWithSession<{ driver: { id: string; name: string } }>("/api/drivers", {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all });
+    },
+  });
+}
+
+export function useDeleteDriver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      fetchWithSession("/api/drivers", { method: "DELETE", body: JSON.stringify({ id }) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all });
     },
   });
 }
@@ -444,7 +447,7 @@ export function useRemarkFields() {
           created_at: string;
         }>;
       }>("/api/config/remarks"),
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
     select: (data) => data.remarkFields,
   });
 }
@@ -454,17 +457,15 @@ export function useRemarkFields() {
 // ============================================
 
 export function useAnalytics(filters?: Record<string, unknown>) {
-  // Build filters param if filters provided
   let queryString = "";
   if (filters && Object.keys(filters).length > 0) {
-    const encoded = btoa(JSON.stringify(filters));
-    queryString = `?filters=${encoded}`;
+    queryString = `?filters=${btoa(JSON.stringify(filters))}`;
   }
 
   return useQuery({
     queryKey: queryKeys.analytics.summary(filters),
     queryFn: () => fetchWithSession<AnalyticsResponse>(`/api/analytics${queryString}`),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -476,10 +477,7 @@ export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { username: string; password: string; display_name: string; role: string }) =>
-      fetchWithSession("/api/users", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+      fetchWithSession("/api/users", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
     },
@@ -490,10 +488,7 @@ export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { id: string; display_name?: string; role?: string; password?: string }) =>
-      fetchWithSession("/api/users", {
-        method: "PUT",
-        body: JSON.stringify(data),
-      }),
+      fetchWithSession("/api/users", { method: "PUT", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
     },
@@ -504,10 +499,7 @@ export function useDeleteUser() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      fetchWithSession("/api/users", {
-        method: "DELETE",
-        body: JSON.stringify({ id }),
-      }),
+      fetchWithSession("/api/users", { method: "DELETE", body: JSON.stringify({ id }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
     },
@@ -518,10 +510,7 @@ export function useCreateRemarkField() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { key: string; label: string; sort_order: number; is_active: boolean }) =>
-      fetchWithSession("/api/config/remarks", {
-        method: "POST",
-        body: JSON.stringify(data),
-      }),
+      fetchWithSession("/api/config/remarks", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
     },
@@ -532,10 +521,7 @@ export function useUpdateRemarkField() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: { id: string; key: string; label: string; sort_order: number; is_active: boolean }) =>
-      fetchWithSession("/api/config/remarks", {
-        method: "PUT",
-        body: JSON.stringify(data),
-      }),
+      fetchWithSession("/api/config/remarks", { method: "PUT", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
     },
@@ -546,10 +532,7 @@ export function useDeleteRemarkField() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      fetchWithSession("/api/config/remarks", {
-        method: "DELETE",
-        body: JSON.stringify({ id }),
-      }),
+      fetchWithSession("/api/config/remarks", { method: "DELETE", body: JSON.stringify({ id }) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.remarkFields.all });
     },

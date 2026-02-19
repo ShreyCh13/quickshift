@@ -1,5 +1,56 @@
 export const APP_NAME = "State Fleet";
 
+// ============================================================
+// INSPECTION CHECKLIST (fixed structure — not dynamic)
+// ============================================================
+export const INSPECTION_CATEGORIES = [
+  {
+    key: "exterior",
+    label: "Exterior Inspection",
+    fields: [
+      { key: "body_condition", label: "Body condition (scratches, dents, rust)" },
+      { key: "windshield", label: "Windshield and windows (cracks, chips)" },
+      { key: "mirrors", label: "Mirrors (side & rearview)" },
+      { key: "headlights", label: "Headlights / Tail lights / Indicators" },
+      { key: "brake_lights", label: "Brake lights" },
+      { key: "wipers", label: "Wipers and washer fluid" },
+      { key: "doors", label: "Doors, locks, and handles" },
+      { key: "tyres", label: "Tyres (tread depth, condition)" },
+    ],
+  },
+  {
+    key: "interior",
+    label: "Interior Inspection",
+    fields: [
+      { key: "battery", label: "Battery" },
+      { key: "seat_belts", label: "Seat belts condition" },
+      { key: "dashboard_warning", label: "Dashboard warning lights" },
+      { key: "speedometer", label: "Speedometer functioning" },
+      { key: "fuel_gauge", label: "Fuel gauge working" },
+      { key: "interior_lights", label: "Interior lights" },
+      { key: "handbrake", label: "Handbrake functioning" },
+      { key: "foot_brake", label: "Foot brake response" },
+      { key: "dry_cleaning", label: "Dry Cleaning" },
+    ],
+  },
+  {
+    key: "road_test",
+    label: "Road Test",
+    fields: [
+      { key: "ac_heater", label: "Air conditioning / Heater" },
+      { key: "engine_start", label: "Smooth engine start" },
+      { key: "steering", label: "Steering alignment" },
+    ],
+  },
+] as const;
+
+export type InspectionCategoryKey = (typeof INSPECTION_CATEGORIES)[number]["key"];
+
+/** Flat list of all checklist field keys */
+export const ALL_INSPECTION_FIELD_KEYS = INSPECTION_CATEGORIES.flatMap((c) =>
+  c.fields.map((f) => f.key)
+) as string[];
+
 export const SESSION_STORAGE_KEY = "sf_session";
 export const SESSION_TTL_DAYS = 30;
 export const SESSION_TTL_MS = SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;

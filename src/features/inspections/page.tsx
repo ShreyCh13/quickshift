@@ -4,20 +4,21 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import MobileShell from "@/components/MobileShell";
+import Autocomplete from "@/components/Autocomplete";
 import { getSessionHeader, loadSession, clearSession } from "@/lib/auth";
-import type { Session } from "@/lib/types";
+import type { Session, ChecklistItem } from "@/lib/types";
 import { buildExportUrl, updateInspection } from "./api";
 import Skeleton from "@/components/Skeleton";
 import { useInspectionsInfinite, useVehicleDropdown, useDeleteInspection, queryKeys } from "@/hooks/useQueries";
+import { INSPECTION_CATEGORIES } from "@/lib/constants";
 
-// Type matching what the hook returns (not full InspectionRow)
 interface InspectionItem {
   id: string;
   vehicle_id: string;
   created_at: string;
   odometer_km: number;
   driver_name: string | null;
-  remarks_json: Record<string, string>;
+  remarks_json: Record<string, ChecklistItem>;
   created_by?: string;
   vehicles: {
     vehicle_code: string;
@@ -25,10 +26,24 @@ interface InspectionItem {
     brand: string | null;
     model: string | null;
   } | null;
-  users?: {
-    id: string;
-    display_name: string;
-  } | null;
+  users?: { id: string; display_name: string } | null;
+}
+
+function fetchDriverSuggestions(search: string): Promise<string[]> {
+  const params = new URLSearchParams({ active: "true" });
+  if (search.trim()) params.set("search", search.trim());
+  return fetch(`/api/drivers?${params}`, { headers: getSessionHeader() })
+    .then((r) => r.json())
+    .then((d) => (d.drivers || []).map((dr: { name: string }) => dr.name))
+    .catch(() => []);
+}
+
+async function addDriver(name: string) {
+  await fetch("/api/drivers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getSessionHeader() },
+    body: JSON.stringify({ name }),
+  });
 }
 
 export default function InspectionsPage() {
@@ -37,58 +52,45 @@ export default function InspectionsPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [vehicleSearch, setVehicleSearch] = useState("");
+  const [driverSearch, setDriverSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<Record<string, unknown>>({});
+  const [editDraft, setEditDraft] = useState<{
+    odometer_km: number;
+    driver_name: string;
+    remarks_json: Record<string, ChecklistItem>;
+  }>({ odometer_km: 0, driver_name: "", remarks_json: {} });
   const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = session?.user.role === "admin";
-
-  // Get vehicles for dropdown
   const { data: vehicles = [] } = useVehicleDropdown();
 
-  // Build filters for the query
   const filters = useMemo(() => {
     const f: Record<string, string> = {};
     if (appliedFilters.vehicle_id) f.vehicle_id = appliedFilters.vehicle_id;
     if (appliedFilters.vehicle_query) f.vehicle_query = appliedFilters.vehicle_query;
+    if (appliedFilters.driver_name) f.driver_name = appliedFilters.driver_name;
     if (appliedFilters.date_from) f.date_from = appliedFilters.date_from;
     if (appliedFilters.date_to) f.date_to = appliedFilters.date_to;
     return Object.keys(f).length > 0 ? f : undefined;
   }, [appliedFilters]);
 
-  // React Query infinite query for inspections
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useInspectionsInfinite(filters, 20);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
+    useInspectionsInfinite(filters, 20);
 
-  // Delete mutation
   const deleteMutation = useDeleteInspection();
-
-  // Flatten paginated data
   const inspections: InspectionItem[] = data?.pages.flatMap((page) => page.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
   useEffect(() => {
     const s = loadSession();
-    if (!s) {
-      router.replace("/login");
-      return;
-    }
+    if (!s) { router.replace("/login"); return; }
     setSession(s);
   }, [router]);
 
-  // Handle unauthorized errors
   useEffect(() => {
     if (isError && error?.message === "Unauthorized") {
       clearSession();
@@ -96,19 +98,12 @@ export default function InspectionsPage() {
     }
   }, [isError, error, router]);
 
-  // Infinite scroll - load more when reaching bottom
   useEffect(() => {
     if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
-
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
+      (entries) => { if (entries[0].isIntersecting) fetchNextPage(); },
       { threshold: 0.1 }
     );
-
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
@@ -117,9 +112,19 @@ export default function InspectionsPage() {
     const f: Record<string, string> = {};
     if (vehicleFilter) f.vehicle_id = vehicleFilter;
     if (vehicleSearch) f.vehicle_query = vehicleSearch;
+    if (driverSearch) f.driver_name = driverSearch;
     if (dateFrom) f.date_from = dateFrom;
     if (dateTo) f.date_to = dateTo;
     setAppliedFilters(f);
+  }
+
+  function handleClearFilters() {
+    setVehicleFilter("");
+    setVehicleSearch("");
+    setDriverSearch("");
+    setDateFrom("");
+    setDateTo("");
+    setAppliedFilters({});
   }
 
   async function handleExport() {
@@ -129,22 +134,16 @@ export default function InspectionsPage() {
       filters: Object.keys(appliedFilters).length ? appliedFilters : undefined,
     });
     const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
-    if (!res.ok) {
-      alert("Export failed");
-      return;
-    }
+    if (!res.ok) { alert("Export failed"); return; }
     const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = objectUrl;
-    
-    // Extract filename from Content-Disposition header, fallback to default
+    link.href = url;
     const disposition = res.headers.get("Content-Disposition");
-    const filenameMatch = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, "") : "inspections.xlsx";
-    link.download = filename;
+    const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    link.download = match ? match[1].replace(/['"]/g, "") : "inspections.xlsx";
     link.click();
-    URL.revokeObjectURL(objectUrl);
+    URL.revokeObjectURL(url);
   }
 
   async function handleDelete(id: string) {
@@ -152,24 +151,38 @@ export default function InspectionsPage() {
     try {
       await deleteMutation.mutateAsync(id);
     } catch (err) {
-      alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown error"));
+      alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown"));
     }
-  }
-
-  async function handleSaveEdit(itemId: string) {
-    await updateInspection({ id: itemId, ...editDraft });
-    setEditId(null);
-    queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all });
   }
 
   function handleStartEdit(item: InspectionItem) {
     setEditId(item.id);
     setEditDraft({
-      vehicle_id: item.vehicle_id,
       odometer_km: item.odometer_km,
       driver_name: item.driver_name || "",
-      remarks_json: item.remarks_json || {},
+      remarks_json: JSON.parse(JSON.stringify(item.remarks_json || {})),
     });
+    setExpandedId(item.id);
+  }
+
+  async function handleSaveEdit(itemId: string) {
+    // Validate remarks required for failed items
+    for (const [key, item] of Object.entries(editDraft.remarks_json)) {
+      if (!item.ok && !item.remarks.trim()) {
+        alert(`Remarks required for failed item: ${key}`);
+        return;
+      }
+    }
+    await updateInspection({ id: itemId, ...editDraft });
+    setEditId(null);
+    queryClient.invalidateQueries({ queryKey: queryKeys.inspections.all });
+  }
+
+  function setEditItem(key: string, patch: Partial<ChecklistItem>) {
+    setEditDraft((prev) => ({
+      ...prev,
+      remarks_json: { ...prev.remarks_json, [key]: { ...prev.remarks_json[key], ...patch } },
+    }));
   }
 
   if (!session) return null;
@@ -177,7 +190,6 @@ export default function InspectionsPage() {
   return (
     <MobileShell title="Inspections">
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4 pb-24">
-        {/* Quick Add Button */}
         <button
           onClick={() => router.push("/inspections/new")}
           className="mb-4 w-full rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 py-4 text-lg font-bold text-white shadow-lg active:scale-[0.98]"
@@ -187,7 +199,14 @@ export default function InspectionsPage() {
 
         {/* Filters */}
         <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
-          <h3 className="font-bold text-slate-900">Filters</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900">Filters</h3>
+            {Object.keys(appliedFilters).length > 0 && (
+              <button onClick={handleClearFilters} className="text-xs font-medium text-blue-600 active:text-blue-800">
+                Clear all
+              </button>
+            )}
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-600">Vehicle</label>
             <select
@@ -204,34 +223,42 @@ export default function InspectionsPage() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Search</label>
+            <label className="text-xs font-medium text-slate-600">Search (vehicle code / plate)</label>
             <input
               type="text"
               value={vehicleSearch}
               onChange={(e) => setVehicleSearch(e.target.value)}
-              placeholder="Search by vehicle code, plate, or name..."
+              placeholder="Search vehicles..."
               className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Driver Name</label>
+            <input
+              type="text"
+              value={driverSearch}
+              onChange={(e) => setDriverSearch(e.target.value)}
+              placeholder="Search by driver name..."
+              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">From Date</label>
+              <label className="text-xs font-medium text-slate-600">From</label>
               <input
                 type="date"
-                value={dateFrom ? dateFrom.split('T')[0] : ''}
-                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : '')}
+                value={dateFrom ? dateFrom.split("T")[0] : ""}
+                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
-                placeholder="Start date"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">To Date</label>
+              <label className="text-xs font-medium text-slate-600">To</label>
               <input
                 type="date"
-                value={dateTo ? dateTo.split('T')[0] : ''}
-                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : '')}
+                value={dateTo ? dateTo.split("T")[0] : ""}
+                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
-                placeholder="End date"
               />
             </div>
           </div>
@@ -251,19 +278,15 @@ export default function InspectionsPage() {
           </div>
         </div>
 
-        {/* Results count */}
         {total > 0 && (
           <div className="mb-3 text-sm text-slate-500">
             Showing {inspections.length} of {total} records
           </div>
         )}
 
-        {/* List */}
         {isLoading ? (
           <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-xl" />
-            ))}
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
           </div>
         ) : inspections.length === 0 ? (
           <div className="rounded-xl bg-white p-8 text-center shadow">
@@ -277,6 +300,10 @@ export default function InspectionsPage() {
               const isExpanded = expandedId === item.id;
               const isEditing = canEdit && editId === item.id;
 
+              // Compute pass/fail counts
+              const allItems = Object.values(item.remarks_json || {});
+              const failCount = allItems.filter((i) => !i.ok).length;
+
               return (
                 <div
                   key={item.id}
@@ -289,69 +316,105 @@ export default function InspectionsPage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1 pr-2">
                         <div className="font-bold text-slate-900">
-                          {item.vehicles?.vehicle_code || `Vehicle ID: ${item.vehicle_id?.substring(0, 8) || "Unknown"}`}
+                          {item.vehicles?.vehicle_code || `Vehicle ${item.vehicle_id?.substring(0, 8)}`}
                           {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                         </div>
                         {item.vehicles?.brand && item.vehicles?.model && (
-                          <div className="mt-0.5 text-sm text-blue-600 font-medium">
+                          <div className="mt-0.5 text-sm font-medium text-blue-600">
                             {item.vehicles.brand} {item.vehicles.model}
                           </div>
                         )}
                         <div className="mt-0.5 text-sm text-slate-600">
-                          {new Date(item.created_at).toLocaleString()} - {item.odometer_km} km
+                          {new Date(item.created_at).toLocaleString()} · {item.odometer_km.toLocaleString()} km
                         </div>
                         {item.driver_name && (
                           <div className="mt-0.5 text-xs text-slate-500">Driver: {item.driver_name}</div>
                         )}
                         {item.users?.display_name && (
-                          <div className="mt-0.5 text-xs text-slate-500">Added by: {item.users.display_name}</div>
+                          <div className="mt-0.5 text-xs text-slate-400">By: {item.users.display_name}</div>
                         )}
                       </div>
-                      <span className="text-blue-600">{isExpanded ? "▼" : "▶"}</span>
+                      <div className="flex flex-col items-end gap-1">
+                        {failCount > 0 ? (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-600">
+                            {failCount} issue{failCount > 1 ? "s" : ""}
+                          </span>
+                        ) : allItems.length > 0 ? (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-600">
+                            All OK
+                          </span>
+                        ) : null}
+                        <span className="text-blue-600">{isExpanded ? "▼" : "▶"}</span>
+                      </div>
                     </div>
                   </button>
 
                   {isExpanded && (
                     <div className="border-t border-blue-100 bg-blue-50 p-4">
-                      <h4 className="mb-2 font-semibold text-slate-900">Inspection Details:</h4>
                       {isEditing ? (
-                        <div className="space-y-3">
-                          <input
-                            type="number"
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                            value={String(editDraft.odometer_km || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, odometer_km: Number(e.target.value) })}
-                            placeholder="Odometer (km)"
-                          />
-                          <input
-                            type="text"
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                            value={String(editDraft.driver_name || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, driver_name: e.target.value })}
-                            placeholder="Driver Name"
-                          />
-                          <div className="space-y-2">
-                            {Object.entries((editDraft.remarks_json as Record<string, string>) || {}).map(
-                              ([key, value]) => (
-                                <div key={key} className="flex items-center gap-2">
-                                  <span className="w-28 text-xs font-semibold text-slate-600">{key}</span>
-                                  <input
-                                    className="flex-1 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
-                                    value={value}
-                                    onChange={(e) =>
-                                      setEditDraft({
-                                        ...editDraft,
-                                        remarks_json: {
-                                          ...(editDraft.remarks_json as Record<string, string>),
-                                          [key]: e.target.value,
-                                        },
-                                      })
-                                    }
-                                  />
-                                </div>
-                              )
-                            )}
+                        /* ---- EDIT MODE ---- */
+                        <div className="space-y-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Odometer (km)</label>
+                            <input
+                              type="number"
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                              value={editDraft.odometer_km}
+                              onChange={(e) => setEditDraft({ ...editDraft, odometer_km: Number(e.target.value) })}
+                            />
                           </div>
+                          <Autocomplete
+                            label="Driver Name"
+                            value={editDraft.driver_name}
+                            onChange={(v) => setEditDraft({ ...editDraft, driver_name: v })}
+                            onAddNew={addDriver}
+                            fetchSuggestions={fetchDriverSuggestions}
+                            placeholder="Search or add driver..."
+                            accentColor="blue"
+                          />
+                          {/* Checklist edit by category */}
+                          {INSPECTION_CATEGORIES.map((cat) => (
+                            <div key={cat.key} className="overflow-hidden rounded-lg bg-white">
+                              <div className="bg-blue-600 px-3 py-2">
+                                <span className="text-xs font-bold uppercase text-white">{cat.label}</span>
+                              </div>
+                              <div className="divide-y divide-slate-100">
+                                {cat.fields.map((field) => {
+                                  const editItem = editDraft.remarks_json[field.key] || { ok: true, remarks: "" };
+                                  return (
+                                    <div key={field.key} className={`px-3 py-2.5 ${!editItem.ok ? "bg-red-50" : ""}`}>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditItem(field.key, { ok: !editItem.ok })}
+                                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 text-xs font-bold ${
+                                            editItem.ok
+                                              ? "border-emerald-500 bg-emerald-500 text-white"
+                                              : "border-red-400 bg-white text-red-400"
+                                          }`}
+                                        >
+                                          {editItem.ok ? "✓" : "✗"}
+                                        </button>
+                                        <span className={`flex-1 text-xs font-medium ${editItem.ok ? "text-slate-700" : "text-red-700"}`}>
+                                          {field.label}
+                                        </span>
+                                      </div>
+                                      {!editItem.ok && (
+                                        <div className="mt-1.5 pl-8">
+                                          <input
+                                            className="w-full rounded border-2 border-red-300 px-2 py-1.5 text-xs focus:border-red-500 focus:outline-none"
+                                            value={editItem.remarks}
+                                            onChange={(e) => setEditItem(field.key, { remarks: e.target.value })}
+                                            placeholder="Describe the issue *"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
                           <div className="flex gap-2 pt-2">
                             <button
                               onClick={() => handleSaveEdit(item.id)}
@@ -368,17 +431,51 @@ export default function InspectionsPage() {
                           </div>
                         </div>
                       ) : (
+                        /* ---- VIEW MODE ---- */
                         <>
-                          <div className="space-y-1 text-sm">
-                            {Object.entries(item.remarks_json || {}).map(([key, value]) => (
-                              <div key={key} className="flex justify-between">
-                                <span className="font-medium text-slate-700">{key}:</span>
-                                <span className="text-slate-600">{String(value)}</span>
+                          {INSPECTION_CATEGORIES.map((cat) => {
+                            const catItems = cat.fields.map((f) => ({
+                              ...f,
+                              item: item.remarks_json[f.key],
+                            }));
+                            const catFailCount = catItems.filter((c) => c.item && !c.item.ok).length;
+                            return (
+                              <div key={cat.key} className="mb-3 overflow-hidden rounded-lg bg-white">
+                                <div className="flex items-center justify-between bg-slate-100 px-3 py-2">
+                                  <span className="text-xs font-bold uppercase text-slate-600">{cat.label}</span>
+                                  {catFailCount > 0 ? (
+                                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-600">
+                                      {catFailCount} issue{catFailCount > 1 ? "s" : ""}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-emerald-600">✓ OK</span>
+                                  )}
+                                </div>
+                                <div className="divide-y divide-slate-50 px-3 py-1">
+                                  {catItems.map(({ key, label, item: ci }) => (
+                                    <div key={key} className="flex items-start gap-2 py-1.5">
+                                      <span
+                                        className={`mt-0.5 shrink-0 text-sm font-bold ${
+                                          ci?.ok !== false ? "text-emerald-500" : "text-red-500"
+                                        }`}
+                                      >
+                                        {ci?.ok !== false ? "✓" : "✗"}
+                                      </span>
+                                      <div className="flex-1">
+                                        <span className="text-xs text-slate-700">{label}</span>
+                                        {ci && !ci.ok && ci.remarks && (
+                                          <div className="mt-0.5 text-xs italic text-red-600">{ci.remarks}</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
+
                           {canEdit && (
-                            <div className="mt-4 flex gap-2">
+                            <div className="mt-3 flex gap-2">
                               <button
                                 onClick={() => handleStartEdit(item)}
                                 className="flex-1 rounded-lg bg-slate-900 py-2.5 text-sm font-semibold text-white active:bg-slate-800"
@@ -404,7 +501,6 @@ export default function InspectionsPage() {
               );
             })}
 
-            {/* Infinite scroll trigger */}
             <div ref={loadMoreRef} className="py-4 text-center">
               {isFetchingNextPage && (
                 <div className="flex items-center justify-center gap-2 text-slate-500">

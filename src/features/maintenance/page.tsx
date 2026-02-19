@@ -4,13 +4,13 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import MobileShell from "@/components/MobileShell";
+import Autocomplete from "@/components/Autocomplete";
 import { getSessionHeader, loadSession, clearSession } from "@/lib/auth";
 import type { Session } from "@/lib/types";
 import { buildExportUrl, updateMaintenance } from "./api";
 import Skeleton from "@/components/Skeleton";
 import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, queryKeys } from "@/hooks/useQueries";
 
-// Type matching what the hook returns (not full MaintenanceRow)
 interface MaintenanceItem {
   id: string;
   vehicle_id: string;
@@ -18,6 +18,7 @@ interface MaintenanceItem {
   odometer_km: number;
   bill_number: string;
   supplier_name: string;
+  supplier_invoice_number: string;
   amount: number;
   remarks: string;
   created_by?: string;
@@ -27,10 +28,24 @@ interface MaintenanceItem {
     brand: string | null;
     model: string | null;
   } | null;
-  users?: {
-    id: string;
-    display_name: string;
-  } | null;
+  users?: { id: string; display_name: string } | null;
+}
+
+function fetchSupplierSuggestions(search: string): Promise<string[]> {
+  const params = new URLSearchParams({ active: "true" });
+  if (search.trim()) params.set("search", search.trim());
+  return fetch(`/api/suppliers?${params}`, { headers: getSessionHeader() })
+    .then((r) => r.json())
+    .then((d) => (d.suppliers || []).map((s: { name: string }) => s.name))
+    .catch(() => []);
+}
+
+async function addSupplier(name: string) {
+  await fetch("/api/suppliers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getSessionHeader() },
+    body: JSON.stringify({ name }),
+  });
 }
 
 export default function MaintenancePage() {
@@ -40,20 +55,25 @@ export default function MaintenancePage() {
   const [vehicleFilter, setVehicleFilter] = useState("");
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
+  const [invoiceFilter, setInvoiceFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<Record<string, unknown>>({});
+  const [editDraft, setEditDraft] = useState<{
+    odometer_km: number;
+    bill_number: string;
+    supplier_name: string;
+    supplier_invoice_number: string;
+    amount: number;
+    remarks: string;
+  }>({ odometer_km: 0, bill_number: "", supplier_name: "", supplier_invoice_number: "", amount: 0, remarks: "" });
   const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = session?.user.role === "admin";
-
-  // Get vehicles for dropdown
   const { data: vehicles = [] } = useVehicleDropdown();
 
-  // Build filters for the query
   const filters = useMemo(() => {
     const f: Record<string, string> = {};
     if (appliedFilters.vehicle_id) f.vehicle_id = appliedFilters.vehicle_id;
@@ -61,37 +81,23 @@ export default function MaintenancePage() {
     if (appliedFilters.date_from) f.date_from = appliedFilters.date_from;
     if (appliedFilters.date_to) f.date_to = appliedFilters.date_to;
     if (appliedFilters.supplier) f.supplier = appliedFilters.supplier;
+    if (appliedFilters.supplier_invoice_number) f.supplier_invoice_number = appliedFilters.supplier_invoice_number;
     return Object.keys(f).length > 0 ? f : undefined;
   }, [appliedFilters]);
 
-  // React Query infinite query for maintenance
-  const {
-    data,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    isLoading,
-    isError,
-    error,
-  } = useMaintenanceInfinite(filters, 20);
+  const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, error } =
+    useMaintenanceInfinite(filters, 20);
 
-  // Delete mutation
   const deleteMutation = useDeleteMaintenance();
-
-  // Flatten paginated data
   const maintenance: MaintenanceItem[] = data?.pages.flatMap((page) => page.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
 
   useEffect(() => {
     const s = loadSession();
-    if (!s) {
-      router.replace("/login");
-      return;
-    }
+    if (!s) { router.replace("/login"); return; }
     setSession(s);
   }, [router]);
 
-  // Handle unauthorized errors
   useEffect(() => {
     if (isError && error?.message === "Unauthorized") {
       clearSession();
@@ -99,19 +105,12 @@ export default function MaintenancePage() {
     }
   }, [isError, error, router]);
 
-  // Infinite scroll - load more when reaching bottom
   useEffect(() => {
     if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
-
     const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
+      (entries) => { if (entries[0].isIntersecting) fetchNextPage(); },
       { threshold: 0.1 }
     );
-
     observer.observe(loadMoreRef.current);
     return () => observer.disconnect();
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
@@ -123,7 +122,14 @@ export default function MaintenancePage() {
     if (dateFrom) f.date_from = dateFrom;
     if (dateTo) f.date_to = dateTo;
     if (supplierFilter) f.supplier = supplierFilter;
+    if (invoiceFilter) f.supplier_invoice_number = invoiceFilter;
     setAppliedFilters(f);
+  }
+
+  function handleClearFilters() {
+    setVehicleFilter(""); setVehicleSearch(""); setSupplierFilter(""); setInvoiceFilter("");
+    setDateFrom(""); setDateTo("");
+    setAppliedFilters({});
   }
 
   async function handleExport() {
@@ -133,22 +139,16 @@ export default function MaintenancePage() {
       filters: Object.keys(appliedFilters).length ? appliedFilters : undefined,
     });
     const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
-    if (!res.ok) {
-      alert("Export failed");
-      return;
-    }
+    if (!res.ok) { alert("Export failed"); return; }
     const blob = await res.blob();
-    const objectUrl = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.href = objectUrl;
-    
-    // Extract filename from Content-Disposition header, fallback to default
+    link.href = url;
     const disposition = res.headers.get("Content-Disposition");
-    const filenameMatch = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-    const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, "") : "maintenance.xlsx";
-    link.download = filename;
+    const match = disposition?.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    link.download = match ? match[1].replace(/['"]/g, "") : "maintenance.xlsx";
     link.click();
-    URL.revokeObjectURL(objectUrl);
+    URL.revokeObjectURL(url);
   }
 
   async function handleDelete(id: string) {
@@ -156,26 +156,31 @@ export default function MaintenancePage() {
     try {
       await deleteMutation.mutateAsync(id);
     } catch (err) {
-      alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown error"));
+      alert("Failed to delete: " + (err instanceof Error ? err.message : "Unknown"));
     }
-  }
-
-  async function handleSaveEdit(itemId: string) {
-    await updateMaintenance({ id: itemId, ...editDraft });
-    setEditId(null);
-    queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
   }
 
   function handleStartEdit(item: MaintenanceItem) {
     setEditId(item.id);
     setEditDraft({
-      vehicle_id: item.vehicle_id,
       odometer_km: item.odometer_km,
       bill_number: item.bill_number,
       supplier_name: item.supplier_name,
+      supplier_invoice_number: item.supplier_invoice_number || "",
       amount: item.amount,
       remarks: item.remarks,
     });
+    setExpandedId(item.id);
+  }
+
+  async function handleSaveEdit(itemId: string) {
+    if (!editDraft.bill_number.trim() || !editDraft.supplier_name.trim() || !editDraft.supplier_invoice_number.trim()) {
+      alert("Bill number, supplier name, and supplier invoice number are required");
+      return;
+    }
+    await updateMaintenance({ id: itemId, ...editDraft });
+    setEditId(null);
+    queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
   }
 
   if (!session) return null;
@@ -183,7 +188,6 @@ export default function MaintenancePage() {
   return (
     <MobileShell title="Maintenance">
       <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white p-4 pb-24">
-        {/* Quick Add Button */}
         <button
           onClick={() => router.push("/maintenance/new")}
           className="mb-4 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 py-4 text-lg font-bold text-white shadow-lg active:scale-[0.98]"
@@ -193,7 +197,14 @@ export default function MaintenancePage() {
 
         {/* Filters */}
         <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
-          <h3 className="font-bold text-slate-900">Filters</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-slate-900">Filters</h3>
+            {Object.keys(appliedFilters).length > 0 && (
+              <button onClick={handleClearFilters} className="text-xs font-medium text-emerald-600 active:text-emerald-800">
+                Clear all
+              </button>
+            )}
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-xs font-medium text-slate-600">Vehicle</label>
             <select
@@ -210,12 +221,12 @@ export default function MaintenancePage() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Search</label>
+            <label className="text-xs font-medium text-slate-600">Search (vehicle code / plate)</label>
             <input
               type="text"
               value={vehicleSearch}
               onChange={(e) => setVehicleSearch(e.target.value)}
-              placeholder="Search by vehicle code or plate..."
+              placeholder="Search vehicles..."
               className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
             />
           </div>
@@ -229,25 +240,33 @@ export default function MaintenancePage() {
               className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
             />
           </div>
-          <div className="space-y-2">
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Supplier Invoice No.</label>
+            <input
+              type="text"
+              value={invoiceFilter}
+              onChange={(e) => setInvoiceFilter(e.target.value)}
+              placeholder="Filter by invoice number..."
+              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">From Date</label>
+              <label className="text-xs font-medium text-slate-600">From</label>
               <input
                 type="date"
-                value={dateFrom ? dateFrom.split('T')[0] : ''}
-                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : '')}
+                value={dateFrom ? dateFrom.split("T")[0] : ""}
+                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
-                placeholder="Start date"
               />
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-600">To Date</label>
+              <label className="text-xs font-medium text-slate-600">To</label>
               <input
                 type="date"
-                value={dateTo ? dateTo.split('T')[0] : ''}
-                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : '')}
+                value={dateTo ? dateTo.split("T")[0] : ""}
+                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-emerald-500 focus:outline-none"
-                placeholder="End date"
               />
             </div>
           </div>
@@ -267,19 +286,15 @@ export default function MaintenancePage() {
           </div>
         </div>
 
-        {/* Results count */}
         {total > 0 && (
           <div className="mb-3 text-sm text-slate-500">
             Showing {maintenance.length} of {total} records
           </div>
         )}
 
-        {/* List */}
         {isLoading ? (
           <div className="space-y-3">
-            {[...Array(5)].map((_, i) => (
-              <Skeleton key={i} className="h-28 w-full rounded-xl" />
-            ))}
+            {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
           </div>
         ) : maintenance.length === 0 ? (
           <div className="rounded-xl bg-white p-8 text-center shadow">
@@ -305,25 +320,28 @@ export default function MaintenancePage() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1 pr-2">
                         <div className="font-bold text-slate-900">
-                          {item.vehicles?.vehicle_code || `Vehicle ID: ${item.vehicle_id?.substring(0, 8)}`}
+                          {item.vehicles?.vehicle_code || `Vehicle ${item.vehicle_id?.substring(0, 8)}`}
                           {item.vehicles?.plate_number ? ` (${item.vehicles.plate_number})` : ""}
                         </div>
                         {item.vehicles?.brand && item.vehicles?.model && (
-                          <div className="mt-0.5 text-sm text-emerald-600 font-medium">
+                          <div className="mt-0.5 text-sm font-medium text-emerald-600">
                             {item.vehicles.brand} {item.vehicles.model}
                           </div>
                         )}
                         <div className="mt-0.5 text-sm text-slate-600">
-                          {new Date(item.created_at).toLocaleString()} - {item.odometer_km} km
+                          {new Date(item.created_at).toLocaleString()} · {item.odometer_km.toLocaleString()} km
                         </div>
-                        <div className="mt-1 text-sm text-slate-600">
-                          {item.supplier_name} - Bill: {item.bill_number}
+                        <div className="mt-0.5 text-sm text-slate-600">
+                          {item.supplier_name} · Bill: {item.bill_number}
                         </div>
+                        {item.supplier_invoice_number && (
+                          <div className="mt-0.5 text-xs text-slate-500">Invoice: {item.supplier_invoice_number}</div>
+                        )}
                         {item.users?.display_name && (
-                          <div className="mt-0.5 text-xs text-slate-500">Added by: {item.users.display_name}</div>
+                          <div className="mt-0.5 text-xs text-slate-400">By: {item.users.display_name}</div>
                         )}
                       </div>
-                      <div className="text-right">
+                      <div className="flex flex-col items-end gap-1">
                         <div className="text-lg font-bold text-emerald-600">
                           ₹{Number(item.amount).toLocaleString()}
                         </div>
@@ -336,41 +354,58 @@ export default function MaintenancePage() {
                     <div className="border-t border-emerald-100 bg-emerald-50 p-4">
                       {isEditing ? (
                         <div className="space-y-3">
-                          <input
-                            type="number"
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
-                            value={String(editDraft.odometer_km || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, odometer_km: Number(e.target.value) })}
-                            placeholder="Odometer (km)"
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Odometer (km)</label>
+                            <input
+                              type="number"
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              value={editDraft.odometer_km}
+                              onChange={(e) => setEditDraft({ ...editDraft, odometer_km: Number(e.target.value) })}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Bill Number</label>
+                            <input
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              value={editDraft.bill_number}
+                              onChange={(e) => setEditDraft({ ...editDraft, bill_number: e.target.value })}
+                            />
+                          </div>
+                          <Autocomplete
+                            label="Supplier Name"
+                            value={editDraft.supplier_name}
+                            onChange={(v) => setEditDraft({ ...editDraft, supplier_name: v })}
+                            onAddNew={addSupplier}
+                            fetchSuggestions={fetchSupplierSuggestions}
+                            placeholder="Search or add supplier..."
+                            accentColor="emerald"
                           />
-                          <input
-                            type="text"
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
-                            value={String(editDraft.bill_number || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, bill_number: e.target.value })}
-                            placeholder="Bill Number"
-                          />
-                          <input
-                            type="text"
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
-                            value={String(editDraft.supplier_name || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, supplier_name: e.target.value })}
-                            placeholder="Supplier"
-                          />
-                          <input
-                            type="number"
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
-                            value={String(editDraft.amount || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, amount: Number(e.target.value) })}
-                            placeholder="Amount"
-                          />
-                          <textarea
-                            className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
-                            rows={3}
-                            value={String(editDraft.remarks || "")}
-                            onChange={(e) => setEditDraft({ ...editDraft, remarks: e.target.value })}
-                            placeholder="Remarks"
-                          />
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Supplier Invoice No.</label>
+                            <input
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              value={editDraft.supplier_invoice_number}
+                              onChange={(e) => setEditDraft({ ...editDraft, supplier_invoice_number: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Amount (₹)</label>
+                            <input
+                              type="number"
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              value={editDraft.amount}
+                              onChange={(e) => setEditDraft({ ...editDraft, amount: Number(e.target.value) })}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Remarks</label>
+                            <textarea
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              rows={3}
+                              value={editDraft.remarks}
+                              onChange={(e) => setEditDraft({ ...editDraft, remarks: e.target.value })}
+                            />
+                          </div>
                           <div className="flex gap-2 pt-2">
                             <button
                               onClick={() => handleSaveEdit(item.id)}
@@ -388,8 +423,28 @@ export default function MaintenancePage() {
                         </div>
                       ) : (
                         <>
-                          <div className="mb-2 text-xs font-medium text-slate-500">Remarks:</div>
-                          <div className="mb-3 text-sm text-slate-700">{item.remarks || "No remarks"}</div>
+                          <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <div className="text-xs font-semibold text-slate-500">Bill Number</div>
+                              <div className="text-slate-800">{item.bill_number}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-500">Supplier Invoice</div>
+                              <div className="text-slate-800">{item.supplier_invoice_number || "—"}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-500">Supplier</div>
+                              <div className="text-slate-800">{item.supplier_name}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-slate-500">Amount</div>
+                              <div className="font-bold text-emerald-700">₹{Number(item.amount).toLocaleString()}</div>
+                            </div>
+                          </div>
+                          <div className="mb-3">
+                            <div className="mb-1 text-xs font-semibold text-slate-500">Remarks</div>
+                            <div className="text-sm text-slate-700">{item.remarks || "No remarks"}</div>
+                          </div>
                           {canEdit && (
                             <div className="flex gap-2">
                               <button
@@ -417,7 +472,6 @@ export default function MaintenancePage() {
               );
             })}
 
-            {/* Infinite scroll trigger */}
             <div ref={loadMoreRef} className="py-4 text-center">
               {isFetchingNextPage && (
                 <div className="flex items-center justify-center gap-2 text-slate-500">

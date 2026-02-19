@@ -87,6 +87,7 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
       }
       updates.password = password; // Store plaintext for admin viewing
+      updates.password_changed_at = new Date().toISOString(); // Invalidates existing sessions
     }
     
     const supabase = getSupabaseAdmin();

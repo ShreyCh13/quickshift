@@ -4,16 +4,10 @@ import { z } from "zod";
 // Common Schemas
 // ============================================================================
 
-/**
- * Schema for validating UUID id parameter (used in DELETE endpoints)
- */
 export const idSchema = z.object({
   id: z.string().uuid(),
 });
 
-/**
- * Schema for delete with optional force flag
- */
 export const deleteWithForceSchema = z.object({
   id: z.string().uuid(),
   force: z.boolean().optional(),
@@ -43,6 +37,10 @@ export const userUpdateSchema = z.object({
   role: z.enum(["admin", "staff"]).optional(),
 });
 
+// ============================================================================
+// Vehicle Schemas
+// ============================================================================
+
 export const vehicleSchema = z.object({
   id: z.string().uuid().optional(),
   vehicle_code: z.string().min(1).max(50),
@@ -54,6 +52,10 @@ export const vehicleSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+// ============================================================================
+// Remark Field Schemas (legacy - kept for admin categories tab)
+// ============================================================================
+
 export const remarkFieldSchema = z.object({
   id: z.string().uuid().optional(),
   key: z.string().min(1),
@@ -62,29 +64,76 @@ export const remarkFieldSchema = z.object({
   is_active: z.boolean().default(true),
 });
 
+// ============================================================================
+// Supplier & Driver Schemas
+// ============================================================================
+
+export const supplierCreateSchema = z.object({
+  name: z.string().min(1).max(200).trim(),
+});
+
+export const supplierUpdateSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(200).trim().optional(),
+  is_active: z.boolean().optional(),
+});
+
+export const driverCreateSchema = z.object({
+  name: z.string().min(1).max(200).trim(),
+});
+
+export const driverUpdateSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string().min(1).max(200).trim().optional(),
+  is_active: z.boolean().optional(),
+});
+
+// ============================================================================
+// Inspection Schemas
+// ============================================================================
+
+/** A single checklist item: ok flag + optional remarks (required if not ok) */
+const checklistItemSchema = z
+  .object({
+    ok: z.boolean(),
+    remarks: z.string().max(500).default(""),
+  })
+  .refine((item) => item.ok || item.remarks.trim().length > 0, {
+    message: "Remarks are required when item is not OK",
+  });
+
 export const inspectionCreateSchema = z.object({
   vehicle_id: z.string().uuid(),
   odometer_km: z.number().int().min(0),
   driver_name: z.string().max(200).optional().nullable(),
-  remarks_json: z.record(z.string(), z.string().min(1).max(500)),
-});
-
-export const maintenanceCreateSchema = z.object({
-  vehicle_id: z.string().uuid(),
-  odometer_km: z.number().int().min(0),
-  bill_number: z.string().min(1).max(100),
-  supplier_name: z.string().min(1).max(200),
-  amount: z.number().min(0),
-  remarks: z.string().min(1).max(5000),
+  remarks_json: z.record(z.string(), checklistItemSchema),
 });
 
 export const inspectionUpdateSchema = inspectionCreateSchema.extend({
   id: z.string().uuid(),
 });
 
+// ============================================================================
+// Maintenance Schemas
+// ============================================================================
+
+export const maintenanceCreateSchema = z.object({
+  vehicle_id: z.string().uuid(),
+  odometer_km: z.number().int().min(0),
+  bill_number: z.string().min(1).max(100),
+  supplier_name: z.string().min(1).max(200),
+  supplier_invoice_number: z.string().min(1).max(100),
+  amount: z.number().min(0),
+  remarks: z.string().min(1).max(5000),
+});
+
 export const maintenanceUpdateSchema = maintenanceCreateSchema.extend({
   id: z.string().uuid(),
 });
+
+// ============================================================================
+// Filter & Pagination Schemas
+// ============================================================================
 
 export const paginationSchema = z.object({
   page: z.number().int().min(1).default(1),
@@ -99,6 +148,7 @@ export const inspectionsFilterSchema = z.object({
   date_to: z.string().optional(),
   odometer_min: z.number().int().optional(),
   odometer_max: z.number().int().optional(),
+  driver_name: z.string().optional(),
   remarks: z.record(z.string(), z.string().min(1)).optional(),
 });
 
@@ -111,6 +161,7 @@ export const maintenanceFilterSchema = z.object({
   odometer_min: z.number().int().optional(),
   odometer_max: z.number().int().optional(),
   supplier: z.string().optional(),
+  supplier_invoice_number: z.string().optional(),
   amount_min: z.number().optional(),
   amount_max: z.number().optional(),
 });
@@ -130,7 +181,7 @@ export const vehicleFilterSchema = z.object({
 });
 
 // ============================================================================
-// Inferred Types (derive types from schemas for type safety)
+// Inferred Types
 // ============================================================================
 
 export type IdInput = z.infer<typeof idSchema>;
@@ -140,6 +191,8 @@ export type UserCreateInput = z.infer<typeof userCreateSchema>;
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
 export type VehicleInput = z.infer<typeof vehicleSchema>;
 export type RemarkFieldInput = z.infer<typeof remarkFieldSchema>;
+export type SupplierCreateInput = z.infer<typeof supplierCreateSchema>;
+export type DriverCreateInput = z.infer<typeof driverCreateSchema>;
 export type InspectionCreateInput = z.infer<typeof inspectionCreateSchema>;
 export type InspectionUpdateInput = z.infer<typeof inspectionUpdateSchema>;
 export type MaintenanceCreateInput = z.infer<typeof maintenanceCreateSchema>;

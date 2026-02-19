@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     // Build base query with user join
     let query = supabase
       .from("maintenance")
-      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, amount, remarks, created_by, updated_by, is_deleted, users!maintenance_created_by_fkey(id, display_name)", { count: "exact" })
+      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, supplier_invoice_number, amount, remarks, created_by, updated_by, is_deleted, users!maintenance_created_by_fkey(id, display_name)", { count: "exact" })
       .eq("is_deleted", false);
 
     // Apply vehicle filters using shared helper
@@ -59,6 +59,11 @@ export async function GET(req: Request) {
     // Apply supplier filter
     if (filters.supplier) {
       query = query.ilike("supplier_name", `%${filters.supplier}%`);
+    }
+
+    // Apply supplier invoice number filter
+    if (filters.supplier_invoice_number) {
+      query = query.ilike("supplier_invoice_number", `%${filters.supplier_invoice_number}%`);
     }
 
     // Execute query
@@ -122,16 +127,20 @@ export async function POST(req: Request) {
     if (!input.supplier_name || !input.supplier_name.trim()) {
       return NextResponse.json({ error: "Supplier name is required" }, { status: 400 });
     }
+    if (!input.supplier_invoice_number || !input.supplier_invoice_number.trim()) {
+      return NextResponse.json({ error: "Supplier invoice number is required" }, { status: 400 });
+    }
     if (input.amount < 0) {
       return NextResponse.json({ error: "Amount cannot be negative" }, { status: 400 });
     }
-    
+
     const { data, error } = await supabase
       .from("maintenance")
       .insert({
         ...input,
         bill_number: input.bill_number.trim(),
         supplier_name: input.supplier_name.trim(),
+        supplier_invoice_number: input.supplier_invoice_number.trim(),
         remarks: input.remarks?.trim() || null,
         created_by: session.user.id,
       })
@@ -223,14 +232,18 @@ export async function PUT(req: Request) {
     if (updates.supplier_name !== undefined && (!updates.supplier_name || !updates.supplier_name.trim())) {
       return NextResponse.json({ error: "Supplier name cannot be empty" }, { status: 400 });
     }
+    if (updates.supplier_invoice_number !== undefined && (!updates.supplier_invoice_number || !updates.supplier_invoice_number.trim())) {
+      return NextResponse.json({ error: "Supplier invoice number cannot be empty" }, { status: 400 });
+    }
     if (updates.amount !== undefined && updates.amount < 0) {
       return NextResponse.json({ error: "Amount cannot be negative" }, { status: 400 });
     }
-    
+
     // Prepare update data with trimmed values
     const updateData: Record<string, unknown> = { ...updates, updated_by: session.user.id };
     if (updates.bill_number !== undefined) updateData.bill_number = updates.bill_number.trim();
     if (updates.supplier_name !== undefined) updateData.supplier_name = updates.supplier_name.trim();
+    if (updates.supplier_invoice_number !== undefined) updateData.supplier_invoice_number = updates.supplier_invoice_number.trim();
     if (updates.remarks !== undefined) updateData.remarks = updates.remarks?.trim() || null;
     
     const { data, error } = await supabase

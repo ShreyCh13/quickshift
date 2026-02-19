@@ -384,12 +384,20 @@ function VehicleHistoryContent() {
                             {(item.data as InspectionWithVehicle).remarks_json && (
                               <div className="mt-2 space-y-1">
                                 {Object.entries((item.data as InspectionWithVehicle).remarks_json || {}).map(
-                                  ([key, value]) => (
-                                    <div key={key} className="text-xs text-slate-500">
-                                      <span className="font-medium capitalize">{key.replace(/_/g, " ")}:</span>{" "}
-                                      {value}
-                                    </div>
-                                  )
+                                  ([key, ci]) => {
+                                    const checkItem = ci as { ok?: boolean; remarks?: string } | string;
+                                    const ok = typeof checkItem === "object" ? checkItem.ok !== false : true;
+                                    const remarks = typeof checkItem === "object" ? checkItem.remarks : String(checkItem);
+                                    return (
+                                      <div key={key} className="text-xs text-slate-500">
+                                        <span className={`font-bold ${ok ? "text-emerald-600" : "text-red-500"}`}>
+                                          {ok ? "✓" : "✗"}
+                                        </span>{" "}
+                                        <span className="font-medium capitalize">{key.replace(/_/g, " ")}</span>
+                                        {!ok && remarks && <span className="ml-1 italic text-red-500">— {remarks}</span>}
+                                      </div>
+                                    );
+                                  }
                                 )}
                               </div>
                             )}
