@@ -63,9 +63,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  // Both admin and staff can edit driver names
 
   try {
     const input = driverUpdateSchema.parse(await req.json());

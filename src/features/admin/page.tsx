@@ -18,9 +18,11 @@ import {
   useDeleteRemarkField,
   useSuppliers,
   useCreateSupplier,
+  useUpdateSupplier,
   useDeleteSupplier,
   useDrivers,
   useCreateDriver,
+  useUpdateDriver,
   useDeleteDriver,
 } from "@/hooks/useQueries";
 import { buildExportUrl } from "./api";
@@ -28,11 +30,16 @@ import { ListSkeleton } from "@/components/Skeleton";
 
 type TabKey = "users" | "drivers" | "suppliers" | "database";
 
-const TABS: { key: TabKey; label: string; icon: string }[] = [
+const ADMIN_TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "users", label: "Users", icon: "👥" },
   { key: "drivers", label: "Drivers", icon: "🚗" },
   { key: "suppliers", label: "Suppliers", icon: "🏪" },
   { key: "database", label: "Database", icon: "💾" },
+];
+
+const STAFF_TABS: { key: TabKey; label: string; icon: string }[] = [
+  { key: "drivers", label: "Drivers", icon: "🚗" },
+  { key: "suppliers", label: "Suppliers", icon: "🏪" },
 ];
 
 export default function AdminPage() {
@@ -46,7 +53,11 @@ export default function AdminPage() {
   const [showAddUser, setShowAddUser] = useState(false);
   const [newUser, setNewUser] = useState({ username: "", password: "", display_name: "", role: "staff" });
   const [newDriverName, setNewDriverName] = useState("");
+  const [editDriverId, setEditDriverId] = useState<string | null>(null);
+  const [editDriverName, setEditDriverName] = useState("");
   const [newSupplierName, setNewSupplierName] = useState("");
+  const [editSupplierId, setEditSupplierId] = useState<string | null>(null);
+  const [editSupplierName, setEditSupplierName] = useState("");
   const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
   const [localRemarkFields, setLocalRemarkFields] = useState<RemarkFieldRow[]>([]);
   const [remarkOrderDirty, setRemarkOrderDirty] = useState(false);
@@ -68,8 +79,10 @@ export default function AdminPage() {
   const updateRemarkFieldMutation = useUpdateRemarkField();
   const deleteRemarkFieldMutation = useDeleteRemarkField();
   const createSupplierMutation = useCreateSupplier();
+  const updateSupplierMutation = useUpdateSupplier();
   const deleteSupplierMutation = useDeleteSupplier();
   const createDriverMutation = useCreateDriver();
+  const updateDriverMutation = useUpdateDriver();
   const deleteDriverMutation = useDeleteDriver();
 
   useEffect(() => {
@@ -81,8 +94,9 @@ export default function AdminPage() {
   useEffect(() => {
     const s = loadSession();
     if (!s) { router.replace("/login"); return; }
-    if (s.user.role !== "admin") { router.replace("/vehicles"); return; }
     setSession(s);
+    // Staff land on drivers tab by default
+    if (s.user.role !== "admin") setActiveTab("drivers");
   }, [router]);
 
   // ---- User actions ----
@@ -155,6 +169,17 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSaveSupplier(id: string) {
+    if (!editSupplierName.trim()) { setError("Supplier name is required"); return; }
+    setError(null);
+    try {
+      await updateSupplierMutation.mutateAsync({ id, name: editSupplierName.trim() });
+      setEditSupplierId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update supplier");
+    }
+  }
+
   async function handleDeleteSupplier(id: string) {
     try {
       await deleteSupplierMutation.mutateAsync(id);
@@ -172,6 +197,17 @@ export default function AdminPage() {
       setNewDriverName("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add driver");
+    }
+  }
+
+  async function handleSaveDriver(id: string) {
+    if (!editDriverName.trim()) { setError("Driver name is required"); return; }
+    setError(null);
+    try {
+      await updateDriverMutation.mutateAsync({ id, name: editDriverName.trim() });
+      setEditDriverId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update driver");
     }
   }
 
@@ -257,13 +293,16 @@ export default function AdminPage() {
 
   if (!session) return null;
 
+  const isAdmin = session.user.role === "admin";
+  const TABS = isAdmin ? ADMIN_TABS : STAFF_TABS;
+
   const tabLoading = activeTab === "users" ? usersLoading
     : activeTab === "drivers" ? driversLoading
     : activeTab === "suppliers" ? suppliersLoading
     : false;
 
   return (
-    <MobileShell title="Admin">
+    <MobileShell title={isAdmin ? "Admin" : "Manage"}>
       <div className="min-h-screen bg-gradient-to-b from-slate-100 to-white p-4 pb-24">
         {/* Sync indicator */}
         <div className="mb-4 flex items-center justify-between rounded-lg bg-white px-4 py-2 shadow-sm">
@@ -507,18 +546,55 @@ export default function AdminPage() {
                   ) : (
                     <div className="space-y-2">
                       {drivers.map((driver) => (
-                        <div key={driver.id} className="flex items-center justify-between rounded-lg border-2 border-slate-100 px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">🚗</span>
-                            <span className="font-medium text-slate-900">{driver.name}</span>
-                          </div>
-                          <button
-                            onClick={() => handleDeleteDriver(driver.id)}
-                            disabled={deleteDriverMutation.isPending}
-                            className="rounded p-1 text-red-400 active:bg-red-50 disabled:opacity-50"
-                          >
-                            🗑️
-                          </button>
+                        <div key={driver.id} className="rounded-lg border-2 border-slate-100 px-3 py-2.5">
+                          {editDriverId === driver.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                className="flex-1 rounded-lg border-2 border-blue-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                value={editDriverName}
+                                onChange={(e) => setEditDriverName(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleSaveDriver(driver.id); if (e.key === "Escape") setEditDriverId(null); }}
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleSaveDriver(driver.id)}
+                                disabled={updateDriverMutation.isPending}
+                                className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white active:bg-blue-700 disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditDriverId(null)}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 active:bg-slate-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400">🚗</span>
+                                <span className="font-medium text-slate-900">{driver.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => { setEditDriverId(driver.id); setEditDriverName(driver.name); }}
+                                  className="rounded p-1.5 text-slate-400 active:bg-slate-50"
+                                >
+                                  ✏️
+                                </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleDeleteDriver(driver.id)}
+                                    disabled={deleteDriverMutation.isPending}
+                                    className="rounded p-1.5 text-red-400 active:bg-red-50 disabled:opacity-50"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -561,18 +637,55 @@ export default function AdminPage() {
                   ) : (
                     <div className="space-y-2">
                       {suppliers.map((supplier) => (
-                        <div key={supplier.id} className="flex items-center justify-between rounded-lg border-2 border-slate-100 px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="text-slate-400">🏪</span>
-                            <span className="font-medium text-slate-900">{supplier.name}</span>
-                          </div>
-                          <button
-                            onClick={() => handleDeleteSupplier(supplier.id)}
-                            disabled={deleteSupplierMutation.isPending}
-                            className="rounded p-1 text-red-400 active:bg-red-50 disabled:opacity-50"
-                          >
-                            🗑️
-                          </button>
+                        <div key={supplier.id} className="rounded-lg border-2 border-slate-100 px-3 py-2.5">
+                          {editSupplierId === supplier.id ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                className="flex-1 rounded-lg border-2 border-emerald-300 px-2 py-1.5 text-sm focus:border-emerald-500 focus:outline-none"
+                                value={editSupplierName}
+                                onChange={(e) => setEditSupplierName(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleSaveSupplier(supplier.id); if (e.key === "Escape") setEditSupplierId(null); }}
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleSaveSupplier(supplier.id)}
+                                disabled={updateSupplierMutation.isPending}
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white active:bg-emerald-700 disabled:opacity-50"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditSupplierId(null)}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 active:bg-slate-50"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400">🏪</span>
+                                <span className="font-medium text-slate-900">{supplier.name}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => { setEditSupplierId(supplier.id); setEditSupplierName(supplier.name); }}
+                                  className="rounded p-1.5 text-slate-400 active:bg-slate-50"
+                                >
+                                  ✏️
+                                </button>
+                                {isAdmin && (
+                                  <button
+                                    onClick={() => handleDeleteSupplier(supplier.id)}
+                                    disabled={deleteSupplierMutation.isPending}
+                                    className="rounded p-1.5 text-red-400 active:bg-red-50 disabled:opacity-50"
+                                  >
+                                    🗑️
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

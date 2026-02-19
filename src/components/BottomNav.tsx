@@ -8,11 +8,11 @@ import { clearSession, loadSession } from "@/lib/auth";
 export default function BottomNav() {
   const router = useRouter();
   const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
     const session = loadSession();
-    setIsAdmin(session?.user.role === "admin");
+    setRole(session?.user.role ?? null);
   }, []);
 
   const navItems = [
@@ -22,8 +22,10 @@ export default function BottomNav() {
     { href: "/analytics", label: "Analytics", shortLabel: "Stats", icon: "📊", color: "text-purple-600", activeColor: "text-purple-700 bg-purple-100" },
   ];
 
-  if (isAdmin) {
+  if (role === "admin") {
     navItems.push({ href: "/admin", label: "Admin", shortLabel: "Admin", icon: "⚙️", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100" });
+  } else if (role === "staff") {
+    navItems.push({ href: "/admin", label: "Manage", shortLabel: "Manage", icon: "📋", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100" });
   }
 
   function handleLogout() {

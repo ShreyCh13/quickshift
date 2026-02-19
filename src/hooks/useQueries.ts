@@ -363,6 +363,17 @@ export function useCreateSupplier() {
   });
 }
 
+export function useUpdateSupplier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: string; name: string }) =>
+      fetchWithSession("/api/suppliers", { method: "PUT", body: JSON.stringify(data) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.all });
+    },
+  });
+}
+
 export function useDeleteSupplier() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -401,6 +412,17 @@ export function useCreateDriver() {
         method: "POST",
         body: JSON.stringify({ name }),
       }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all });
+    },
+  });
+}
+
+export function useUpdateDriver() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { id: string; name: string }) =>
+      fetchWithSession("/api/drivers", { method: "PUT", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all });
     },
