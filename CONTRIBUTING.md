@@ -18,8 +18,8 @@ Quick start guide for developers and AI assistants working on this codebase.
    ```
 
 3. **Set up database**:
-   - Run `supabase/schema.sql` in Supabase SQL Editor
-   - Run `supabase/migration_improvements.sql`
+   - Fresh: Run `supabase/schema.sql`
+   - Existing: Run `migration_improvements.sql`, then `migration_v2.sql`, `migration_v3.sql`, `migration_v4.sql`
    - (Optional) Run `supabase/seed.sql` for test data
 
 ## 📁 Where to Find Things
@@ -31,10 +31,13 @@ Quick start guide for developers and AI assistants working on this codebase.
 | Add a shared component | `src/components/[Name].tsx` |
 | Add PWA files | `public/manifest.json`, `public/sw.js` |
 | Add a feature | `src/features/[name]/` |
+| Alerts | `src/features/alerts/`, `src/app/api/alerts/` |
+| Suppliers/Drivers | `src/app/api/suppliers/`, `src/app/api/drivers/` |
+| Checklist config | `src/app/api/config/checklist/` |
 | Add types | `src/lib/types.ts` |
 | Add validation | `src/lib/validation.ts` |
 | Add React Query hooks | `src/hooks/useQueries.ts` |
-| Modify database | `supabase/migration_improvements.sql` |
+| Modify database | `supabase/migration_v*.sql` |
 
 ## 🎯 Common Tasks
 
@@ -79,9 +82,9 @@ touch src/app/my-feature/page.tsx
 
 ```bash
 # 1. Test locally first!
-# Edit supabase/migration_improvements.sql
+# Add new migration: supabase/migration_v5.sql (or edit existing migration)
 
-# 2. Add transaction wrapper
+# 2. Use transaction wrapper for migrations
 BEGIN;
 -- Your changes
 COMMIT;

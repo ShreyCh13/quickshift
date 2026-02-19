@@ -1,5 +1,26 @@
 # State Fleet Changelog
 
+## [1.2.0] - 2026-02-19 - Alerts, Suppliers, Drivers, Checklist, Sheets Sync
+
+### ✨ Features
+- **Fleet Alerts** (`/alerts`): Overdue inspections, maintenance due, odometer gaps, recurring checklist failures
+- **Suppliers & Drivers**: CRUD APIs and admin management for maintenance suppliers and inspection drivers
+- **Checklist Items** (migration_v4): Admin-configurable inspection checklist (replaces static remark_fields)
+- **Google Sheets Sync** (migration_v3): `maintenance_vehicle_summary` view + anon RLS for external sync
+- **supplier_invoice_number**: New field on maintenance (migration_v2)
+- **password_changed_at**: Session invalidation when admin changes password (migration_v2)
+
+### 🗄️ Database Migrations
+- `migration_v2.sql`: suppliers, drivers tables; supplier_invoice_number; password_changed_at
+- `migration_v3.sql`: maintenance_vehicle_summary view; anon RLS for Sheets
+- `migration_v4.sql`: checklist_items table with default seed
+
+### 📚 Documentation
+- Updated README, ARCHITECTURE, CONTRIBUTING with latest migrations and features
+- Fixed session header (x-sf-session), clone path, migration order
+
+---
+
 ## [1.1.0] - 2026-02-03 - PWA Support & Maintenance
 
 ### ✨ Features

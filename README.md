@@ -87,7 +87,10 @@ state-fleet/
 │   │       ├── export/               # CSV/Excel export
 │   │       ├── backup/               # S3 backup trigger
 │   │       ├── users/                # User management
-│   │       └── config/               # App configuration
+│   │       ├── alerts/               # Fleet alerts
+│   │       ├── suppliers/            # Suppliers CRUD
+│   │       ├── drivers/              # Drivers CRUD
+│   │       └── config/               # Checklist, remarks
 │   ├── components/                   # Shared UI components
 │   │   ├── MobileShell.tsx           # Mobile app wrapper
 │   │   ├── BottomNav.tsx             # Mobile navigation
@@ -129,8 +132,11 @@ state-fleet/
 │       ├── storage.ts                # S3 operations
 │       └── offline.ts                # Offline queue (IndexedDB)
 ├── supabase/                         # Database files
-│   ├── schema.sql                    # Initial database schema
-│   ├── migration_improvements.sql    # Production-ready migration
+│   ├── schema.sql                    # Full schema (fresh install)
+│   ├── migration_improvements.sql    # Production enhancements (existing DB)
+│   ├── migration_v2.sql              # Suppliers, drivers, supplier_invoice_number
+│   ├── migration_v3.sql              # maintenance_vehicle_summary view, RLS for Sheets sync
+│   ├── migration_v4.sql              # checklist_items table
 │   └── seed.sql                      # Sample data
 ├── data/                             # Sample data files
 │   └── vehicles.csv                  # Vehicle import template
@@ -157,7 +163,7 @@ state-fleet/
 ```bash
 # 1. Clone repository
 git clone <repo-url>
-cd quickshift
+cd Maintainence
 
 # 2. Install dependencies
 npm install
@@ -167,8 +173,8 @@ cp env.example .env.local
 # Edit .env.local with your credentials
 
 # 4. Set up database (in Supabase SQL Editor)
-#   a. Run supabase/schema.sql to create base tables
-#   b. Run supabase/migration_improvements.sql for production enhancements
+#   a. Fresh install: Run supabase/schema.sql (includes suppliers, drivers)
+#   b. Existing DB: Run migration_improvements.sql, then migration_v2.sql, migration_v3.sql, migration_v4.sql
 #   c. (optional) Run supabase/seed.sql for sample data
 
 # 5. Start development server
@@ -252,6 +258,7 @@ Maintenance/repair records with cost tracking.
 - odometer_km: integer
 - bill_number: text (indexed)
 - supplier_name: text (full-text indexed)
+- supplier_invoice_number: text (indexed)
 - amount: numeric(12,2)
 - remarks: text
 - is_deleted: boolean (soft delete)
@@ -265,22 +272,37 @@ Maintenance/repair records with cost tracking.
 
 **Indexes**: `vehicle_id+created_at`, `created_at`, `is_deleted`, `odometer_km`, `bill_number`, `supplier_name` (trigram), `amount`
 
-#### `remark_fields`
-Configurable inspection checklist items.
+#### `checklist_items`
+Admin-configurable inspection checklist (categories: exterior, interior, road_test).
 
 ```sql
 - id: uuid (PK)
-- field_key: text (unique)
-- label: text
-- is_active: boolean
+- category_key: text
+- category_label: text
+- item_key: text (unique, matches remarks_json keys)
+- item_label: text
 - sort_order: integer
+- is_active: boolean
 - created_at: timestamptz
+```
+
+#### `suppliers` / `drivers`
+Reference tables for maintenance suppliers and inspection drivers.
+
+```sql
+- id: uuid (PK)
+- name: text (unique)
+- is_active: boolean
+- created_at, updated_at, created_by
 ```
 
 ### Database Views
 
+#### `maintenance_vehicle_summary` (migration_v3)
+Pre-aggregated maintenance cost per vehicle. Used by Google Sheets sync.
+
 #### `vehicle_stats`
-Pre-aggregated vehicle analytics (created by migration).
+Pre-aggregated vehicle analytics (created by migration_improvements).
 
 ```sql
 SELECT 
@@ -307,7 +329,8 @@ GROUP BY vehicle_id
 3. **User Deletion**: `ON DELETE SET NULL` on `created_by` allows user removal without losing records
 4. **Audit Trail**: `created_by`, `updated_by`, `created_at`, `updated_at` on all tables
 5. **Indexing**: Composite indexes on `(vehicle_id, created_at)` for efficient pagination
-6. **JSONB**: Flexible `remarks_json` field for dynamic inspection forms
+6. **JSONB**: Flexible `remarks_json` field for dynamic inspection checklist
+7. **Google Sheets Sync**: `maintenance_vehicle_summary` view + anon RLS (migration_v3) for external sync
 
 ---
 
@@ -613,11 +636,33 @@ Delete user with cascade check (admin only).
 
 ### Configuration
 
-#### `GET /api/config/remarks`
-Get inspection remark fields.
+#### `GET /api/config/checklist`
+Get inspection checklist items (admin-configurable).
 
-#### `POST/PUT/DELETE /api/config/remarks`
-Manage remark fields (admin only). DELETE performs soft delete.
+#### `POST/PUT/DELETE /api/config/checklist`
+Manage checklist items (admin only). DELETE soft-deactivates.
+
+#### `GET /api/config/remarks`
+Get legacy remark fields (if using remark_fields table).
+
+---
+
+### Alerts
+
+#### `GET /api/alerts`
+Fleet alerts (overdue inspections, maintenance due, odometer gaps, recurring failures).
+
+**Response**: `{ summary: { critical, warning }, alerts: FleetAlert[] }`
+
+---
+
+### Suppliers & Drivers
+
+#### `GET/POST/PUT/DELETE /api/suppliers`
+Manage maintenance suppliers (admin only).
+
+#### `GET/POST/PUT/DELETE /api/drivers`
+Manage drivers for inspections (admin only).
 
 ---
 
@@ -638,6 +683,7 @@ App
     ├── Inspections (/inspections)
     │   ├── Inspection List (infinite scroll)
     │   └── New Inspection (/inspections/new)
+    ├── Alerts (/alerts) - Overdue inspections, maintenance due, recurring failures
     ├── Maintenance (/maintenance)
     │   ├── Maintenance List (infinite scroll)
     │   └── New Maintenance (/maintenance/new)
@@ -707,7 +753,7 @@ The app is a fully installable Progressive Web App (PWA).
 2. Server validates password (PBKDF2 hash comparison)
 3. Server generates session object with user data and timestamp
 4. Client stores session in localStorage
-5. Client includes `x-qs-session` header on all requests
+5. Client includes `x-sf-session` header on all requests
 6. Server validates session TTL (24 hours)
 
 **Session Object**:
@@ -844,7 +890,13 @@ Sheet 2: Data
 
 ---
 
-### 6. Backup System
+### 6. Alerts System
+
+**Location**: `src/app/api/alerts/route.ts`, `src/features/alerts/`
+
+Fleet-wide alerts: overdue inspections, maintenance due, odometer gaps, recurring checklist failures. Thresholds configurable in route.
+
+### 7. Backup System
 
 **Location**: `src/app/api/backup/route.ts`, `.github/workflows/weekly-backup.yml`
 
@@ -987,17 +1039,12 @@ S3_REGION=us-east-1
 
 ### Database Setup
 
-Run these in Supabase SQL Editor:
+Run these in Supabase SQL Editor **in order**:
 
 ```sql
--- 1. Initial schema (fresh install only)
--- Run: supabase/schema.sql
-
--- 2. Production-ready migration (always run)
--- Run: supabase/migration_improvements.sql
-
--- 3. Seed data (optional, development only)
--- Run: supabase/seed.sql
+-- 1. Fresh install: Run supabase/schema.sql
+-- 2. Existing DB: Run migration_improvements.sql, then migration_v2.sql, migration_v3.sql, migration_v4.sql
+-- 3. Seed data (optional): supabase/seed.sql
 ```
 
 ### Post-Deployment Checklist
@@ -1206,6 +1253,6 @@ For issues or questions:
 
 ---
 
-**Last Updated**: 2026-02-03  
-**Version**: 1.1.0  
+**Last Updated**: 2026-02-19  
+**Version**: 1.2.0  
 **Status**: Production Ready ✅

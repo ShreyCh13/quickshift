@@ -144,7 +144,7 @@ React Query Auto-Refetch
      FOR EACH ROW
      EXECUTE FUNCTION set_updated_at();
    ```
-2. Add migration to `supabase/migration_improvements.sql`
+2. Add migration to `supabase/migration_improvements.sql` or new `migration_v*.sql`
 3. Add TypeScript type to `src/lib/types.ts`
 4. Add Zod schema to `src/lib/validation.ts`
 5. Create API route
@@ -337,7 +337,7 @@ if (isLoading) {
 
 ## Production Checklist
 
-- [ ] Run `migration_improvements.sql` on database
+- [ ] Run migrations in order: `migration_improvements.sql`, `migration_v2.sql`, `migration_v3.sql`, `migration_v4.sql`
 - [ ] Change default user passwords
 - [ ] Set all environment variables in Vercel
 - [ ] Test S3 backup webhook
@@ -356,7 +356,6 @@ if (isLoading) {
 - `lib/validation.ts`: Zod schemas
 - `lib/db.ts`: Supabase client
 - `lib/types.ts`: TypeScript types
-- `hooks/useQueries.ts`: React Query hooks
 - `hooks/useQueries.ts`: React Query hooks & fetch helpers
 
 ### Environment Variables
