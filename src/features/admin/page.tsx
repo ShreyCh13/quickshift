@@ -39,7 +39,7 @@ export default function AdminPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [userEdits, setUserEdits] = useState<
-    Record<string, { display_name: string; role: UserRow["role"]; password: string }>
+    Record<string, { username: string; display_name: string; role: UserRow["role"]; password: string }>
   >({});
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("users");
@@ -89,7 +89,7 @@ export default function AdminPage() {
   function startUserEdit(user: UserRow) {
     setUserEdits((prev) => ({
       ...prev,
-      [user.id]: { display_name: user.display_name, role: user.role, password: "" },
+      [user.id]: { username: user.username, display_name: user.display_name, role: user.role, password: "" },
     }));
   }
 
@@ -97,15 +97,16 @@ export default function AdminPage() {
     setUserEdits((prev) => { const n = { ...prev }; delete n[id]; return n; });
   }
 
-  function updateUserEdit(id: string, patch: Partial<{ display_name: string; role: UserRow["role"]; password: string }>) {
+  function updateUserEdit(id: string, patch: Partial<{ username: string; display_name: string; role: UserRow["role"]; password: string }>) {
     setUserEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   }
 
   async function handleSaveUser(userId: string) {
     const editing = userEdits[userId];
     if (!editing) return;
-    const payload: { id: string; display_name?: string; role?: string; password?: string } = {
+    const payload: { id: string; username?: string; display_name?: string; role?: string; password?: string } = {
       id: userId,
+      username: editing.username,
       display_name: editing.display_name,
       role: editing.role,
     };
@@ -350,6 +351,13 @@ export default function AdminPage() {
 
                           {editing ? (
                             <div className="mt-4 space-y-3 border-t pt-4">
+                              <input
+                                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                                value={editing.username}
+                                onChange={(e) => updateUserEdit(user.id, { username: e.target.value })}
+                                placeholder="Username"
+                                autoComplete="off"
+                              />
                               <input
                                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
                                 value={editing.display_name}

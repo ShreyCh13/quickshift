@@ -487,7 +487,7 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; display_name?: string; role?: string; password?: string }) =>
+    mutationFn: (data: { id: string; username?: string; display_name?: string; role?: string; password?: string }) =>
       fetchWithSession("/api/users", { method: "PUT", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });

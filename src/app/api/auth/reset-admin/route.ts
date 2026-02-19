@@ -6,6 +6,7 @@ import { DEFAULT_USERS } from "@/lib/constants";
 /**
  * Emergency admin password reset endpoint.
  * Resets the admin account to default credentials and clears all rate limits.
+ * Finds admin by role (not username) so it works even if username was changed.
  * Only use when locked out of the system.
  */
 export async function POST() {
@@ -16,18 +17,33 @@ export async function POST() {
 
   const supabase = getSupabaseAdmin();
 
-  const { error } = await supabase
+  // Find the admin user by role (handles username changes)
+  const { data: adminUser, error: fetchError } = await supabase
+    .from("users")
+    .select("id, username")
+    .eq("role", "admin")
+    .limit(1)
+    .maybeSingle();
+
+  if (fetchError || !adminUser) {
+    console.error("Failed to find admin user:", fetchError);
+    return NextResponse.json({ error: "No admin user found in database" }, { status: 404 });
+  }
+
+  // Reset username back to default AND reset password
+  const { error: updateError } = await supabase
     .from("users")
     .update({
+      username: adminDefault.username,
       password: adminDefault.password,
       password_changed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq("username", adminDefault.username);
+    .eq("id", adminUser.id);
 
-  if (error) {
-    console.error("Failed to reset admin password:", error);
-    return NextResponse.json({ error: "Failed to reset password" }, { status: 500 });
+  if (updateError) {
+    console.error("Failed to reset admin credentials:", updateError);
+    return NextResponse.json({ error: "Failed to reset credentials" }, { status: 500 });
   }
 
   // Clear all in-memory rate limits and IP blocks
@@ -35,6 +51,7 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
-    message: `Admin password reset to default. You can now log in with username "${adminDefault.username}" and password "${adminDefault.password}".`,
+    message: `Admin reset successful. Log in with username "${adminDefault.username}" and password "${adminDefault.password}".`,
+    previousUsername: adminUser.username,
   });
 }
