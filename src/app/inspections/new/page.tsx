@@ -17,7 +17,7 @@ function buildInitialChecklist(): ChecklistState {
   const state: ChecklistState = {};
   for (const cat of INSPECTION_CATEGORIES) {
     for (const field of cat.fields) {
-      state[field.key] = { ok: true, remarks: "" };
+      state[field.key] = { ok: false, remarks: "" };
     }
   }
   return state;
@@ -54,6 +54,7 @@ function NewInspectionForm() {
   const [odometerKm, setOdometerKm] = useState("");
   const [driverName, setDriverName] = useState("");
   const [checklist, setChecklist] = useState<ChecklistState>(buildInitialChecklist);
+  const [touched, setTouched] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const s = loadSession();
@@ -67,6 +68,7 @@ function NewInspectionForm() {
 
   function setItem(key: string, patch: Partial<ChecklistItem>) {
     setChecklist((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setTouched((prev) => new Set(prev).add(key));
   }
 
   async function handleSubmit() {
@@ -217,8 +219,8 @@ function NewInspectionForm() {
                         </span>
                       </div>
 
-                      {/* Remarks field — shown only when not OK */}
-                      {!item.ok && (
+                      {/* Remarks field — shown only when explicitly marked as failed */}
+                      {!item.ok && touched.has(field.key) && (
                         <div className="mt-2 pl-10">
                           <textarea
                             value={item.remarks}

@@ -2,16 +2,22 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { loadSession } from "@/lib/auth";
+import { loadSession, getSessionHeader } from "@/lib/auth";
 import MobileShell from "@/components/MobileShell";
 import type { Session, VehicleRow } from "@/lib/types";
 import { fetchVehicles } from "@/features/vehicles/api";
+
+const LIVE_SHEET_URL = "https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit?usp=sharing";
+
+type AlertSummary = { critical: number; warning: number; info: number; total: number };
 
 export default function Home() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState("");
+  const [showLiveSheetConfirm, setShowLiveSheetConfirm] = useState(false);
+  const [alertSummary, setAlertSummary] = useState<AlertSummary | null>(null);
 
   useEffect(() => {
     const s = loadSession();
@@ -21,11 +27,24 @@ export default function Home() {
     }
     setSession(s);
     loadVehicles();
+    loadAlertSummary();
   }, [router]);
 
   async function loadVehicles() {
     const data = await fetchVehicles({ page: 1, pageSize: 100 });
     setVehicles(data.vehicles || []);
+  }
+
+  async function loadAlertSummary() {
+    try {
+      const res = await fetch("/api/alerts", { headers: getSessionHeader() });
+      if (res.ok) {
+        const data = await res.json();
+        setAlertSummary(data.summary ?? null);
+      }
+    } catch {
+      // Non-critical — alerts banner is optional on homepage
+    }
   }
 
   if (!session) return null;
@@ -34,6 +53,50 @@ export default function Home() {
     <MobileShell title="State Fleet">
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
         <div className="mx-auto max-w-lg space-y-6">
+          {/* Dashboard header row */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Welcome back</p>
+              <h1 className="text-lg font-bold text-slate-800">{session?.user.displayName}</h1>
+            </div>
+            <button
+              onClick={() => setShowLiveSheetConfirm(true)}
+              className="hidden sm:flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white active:bg-emerald-700"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+              </svg>
+              Live Sheet
+            </button>
+          </div>
+
+          {/* Alert banner */}
+          {alertSummary && alertSummary.total > 0 && (
+            <button
+              onClick={() => router.push("/alerts")}
+              className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left shadow-sm transition active:opacity-80 ${
+                alertSummary.critical > 0
+                  ? "bg-red-50 ring-1 ring-red-200"
+                  : "bg-amber-50 ring-1 ring-amber-200"
+              }`}
+            >
+              <span className="text-2xl">{alertSummary.critical > 0 ? "🚨" : "⚠️"}</span>
+              <div className="flex-1 min-w-0">
+                <p className={`text-sm font-bold ${alertSummary.critical > 0 ? "text-red-700" : "text-amber-700"}`}>
+                  {alertSummary.critical > 0
+                    ? `${alertSummary.critical} critical alert${alertSummary.critical > 1 ? "s" : ""} need attention`
+                    : `${alertSummary.warning} vehicle${alertSummary.warning > 1 ? "s" : ""} need attention`}
+                </p>
+                <p className={`text-xs ${alertSummary.critical > 0 ? "text-red-500" : "text-amber-500"}`}>
+                  {alertSummary.total} total alert{alertSummary.total > 1 ? "s" : ""} · Tap to review
+                </p>
+              </div>
+              <svg className={`h-4 w-4 flex-shrink-0 ${alertSummary.critical > 0 ? "text-red-400" : "text-amber-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          )}
+
           {/* Quick Actions */}
           <div className="rounded-2xl bg-white p-6 shadow-lg">
             <h2 className="mb-4 text-2xl font-bold text-slate-900">Quick Actions</h2>
@@ -125,15 +188,59 @@ export default function Home() {
               <span className="mt-1 text-sm font-bold text-purple-600">Analytics</span>
             </button>
             <button
-              onClick={() => router.push("/settings")}
-              className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
+              onClick={() => router.push("/alerts")}
+              className="relative flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
             >
-              <span className="text-2xl">⚙️</span>
-              <span className="mt-1 text-sm font-bold text-slate-600">Settings</span>
+              <span className="text-2xl">🔔</span>
+              <span className="mt-1 text-sm font-bold text-orange-600">Fleet Alerts</span>
+              {alertSummary && alertSummary.critical > 0 && (
+                <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                  {alertSummary.critical > 9 ? "9+" : alertSummary.critical}
+                </span>
+              )}
             </button>
           </div>
         </div>
       </div>
+      {/* Live Sheet confirmation modal */}
+      {showLiveSheetConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowLiveSheetConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100">
+              <svg className="h-6 w-6 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+              </svg>
+            </div>
+            <h2 className="mb-2 text-xl font-bold text-slate-900">Open Live Sheet?</h2>
+            <p className="mb-6 text-sm text-slate-500">
+              View real-time fleet data in Google Sheets — inspections, maintenance records, and vehicle cost summaries, auto-refreshed every 5 minutes.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowLiveSheetConfirm(false)}
+                className="flex-1 rounded-xl border-2 border-slate-200 py-3 text-sm font-semibold text-slate-700 active:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <a
+                href={LIVE_SHEET_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setShowLiveSheetConfirm(false)}
+                className="flex flex-1 items-center justify-center rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white active:bg-emerald-700"
+              >
+                Open Sheet
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </MobileShell>
   );
 }

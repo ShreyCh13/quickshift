@@ -27,14 +27,16 @@ import {
 } from "@/hooks/useQueries";
 import { buildExportUrl } from "./api";
 import { ListSkeleton } from "@/components/Skeleton";
+import { generateAppsScript } from "@/lib/SyncSettings";
 
-type TabKey = "users" | "drivers" | "suppliers" | "database";
+type TabKey = "users" | "drivers" | "suppliers" | "database" | "sheet";
 
 const ADMIN_TABS: { key: TabKey; label: string; icon: string }[] = [
   { key: "users", label: "Users", icon: "👥" },
   { key: "drivers", label: "Drivers", icon: "🚗" },
   { key: "suppliers", label: "Suppliers", icon: "🏪" },
   { key: "database", label: "Database", icon: "💾" },
+  { key: "sheet", label: "Sheet", icon: "📊" },
 ];
 
 const STAFF_TABS: { key: TabKey; label: string; icon: string }[] = [
@@ -64,6 +66,8 @@ export default function AdminPage() {
   const [draggingRemarkId, setDraggingRemarkId] = useState<string | null>(null);
   const [dragOverRemarkId, setDragOverRemarkId] = useState<string | null>(null);
   const [newRemark, setNewRemark] = useState({ key: "", label: "", is_active: true });
+  const [scriptCopied, setScriptCopied] = useState(false);
+  const [showScriptPreview, setShowScriptPreview] = useState(false);
 
   // React Query hooks
   const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
@@ -274,6 +278,17 @@ export default function AdminPage() {
     }
   }
 
+  // ---- Google Sheet script ----
+  async function handleCopyScript() {
+    try {
+      await navigator.clipboard.writeText(generateAppsScript());
+      setScriptCopied(true);
+      setTimeout(() => setScriptCopied(false), 3000);
+    } catch {
+      setError("Failed to copy to clipboard — try the preview instead");
+    }
+  }
+
   // ---- Exports ----
   const exportVehicles = useMemo(() => buildExportUrl({ type: "vehicles", format: "xlsx" }), []);
   const exportInspections = useMemo(() => buildExportUrl({ type: "inspections", format: "xlsx" }), []);
@@ -317,12 +332,12 @@ export default function AdminPage() {
 
         {/* Tabs */}
         <div className="mb-4 rounded-xl bg-white p-2 shadow">
-          <div className="grid grid-cols-4 gap-1">
+          <div className="flex gap-1 overflow-x-auto">
             {TABS.map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex flex-col items-center justify-center rounded-lg py-2.5 text-xs font-medium transition ${
+                className={`flex flex-shrink-0 flex-col items-center justify-center rounded-lg px-3 py-2.5 text-xs font-medium transition ${
                   activeTab === tab.key ? "bg-slate-900 text-white" : "text-slate-600 active:bg-slate-100"
                 }`}
               >
@@ -732,6 +747,124 @@ export default function AdminPage() {
                     <div className="flex justify-between"><span>Drivers</span><span className="font-mono">{drivers.length}</span></div>
                     <div className="flex justify-between"><span>Status</span><span className="text-emerald-400">Connected</span></div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ========== SHEET TAB ========== */}
+            {activeTab === "sheet" && (
+              <div className="space-y-4">
+                {/* Header card */}
+                <div className="rounded-xl bg-white p-4 shadow">
+                  <div className="mb-4 flex items-start gap-3">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-100">
+                      <svg className="h-5 w-5 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-slate-900">Live Google Sheet</h2>
+                      <p className="text-sm text-slate-500">
+                        Auto-syncs Inspections, Maintenance &amp; Vehicle Summary tabs every 5 minutes.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Copy button */}
+                  <button
+                    onClick={handleCopyScript}
+                    className={`mb-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition ${
+                      scriptCopied
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-emerald-600 text-white active:bg-emerald-700"
+                    }`}
+                  >
+                    {scriptCopied ? (
+                      <>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied to Clipboard!
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy Apps Script
+                      </>
+                    )}
+                  </button>
+
+                  {/* 3-step instructions */}
+                  <div className="space-y-3">
+                    {[
+                      {
+                        step: "1",
+                        title: "Open your Google Sheet",
+                        desc: "Go to Extensions → Apps Script to open the script editor.",
+                      },
+                      {
+                        step: "2",
+                        title: "Paste & Save",
+                        desc: "Delete any existing code, paste the copied script, then press Ctrl+S (or ⌘+S) to save.",
+                      },
+                      {
+                        step: "3",
+                        title: "Authorize & Enable",
+                        desc: `Run onOpen() once to authorize, then use the "State Fleet" menu → "Setup Auto-Refresh".`,
+                      },
+                    ].map(({ step, title, desc }) => (
+                      <div key={step} className="flex gap-3">
+                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+                          {step}
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold text-slate-800">{title}</div>
+                          <div className="text-xs text-slate-500">{desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preview toggle */}
+                <div className="rounded-xl bg-white shadow">
+                  <button
+                    onClick={() => setShowScriptPreview((v) => !v)}
+                    className="flex w-full items-center justify-between px-4 py-3"
+                  >
+                    <span className="text-sm font-semibold text-slate-700">
+                      {showScriptPreview ? "Hide" : "Preview"} Script
+                    </span>
+                    <svg
+                      className={`h-4 w-4 text-slate-400 transition-transform ${showScriptPreview ? "rotate-180" : ""}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {showScriptPreview && (
+                    <div className="border-t border-slate-100 bg-slate-900 p-4 rounded-b-xl">
+                      <pre className="overflow-x-auto whitespace-pre text-xs leading-relaxed text-emerald-300">
+                        {generateAppsScript()}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* DB setup reminder */}
+                <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+                  <div className="mb-1 flex items-center gap-2">
+                    <svg className="h-4 w-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                    </svg>
+                    <span className="text-sm font-bold text-amber-800">Database setup required</span>
+                  </div>
+                  <p className="text-xs text-amber-700">
+                    Run <code className="rounded bg-amber-100 px-1 font-mono">migration_v3.sql</code> in Supabase SQL Editor to create the
+                    Vehicle Summary view and grant the anon key read access for the Apps Script.
+                  </p>
                 </div>
               </div>
             )}

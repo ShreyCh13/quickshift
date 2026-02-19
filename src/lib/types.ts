@@ -112,3 +112,37 @@ export type VehiclesImportResult = {
   skipped: number;
   errors: Array<{ row: number; message: string }>;
 };
+
+// ============================================================
+// FLEET ALERTS
+// ============================================================
+
+export type AlertSeverity = "critical" | "warning" | "info";
+
+export type AlertType =
+  | "INSPECTION_OVERDUE"
+  | "INSPECTION_CRITICAL"
+  | "MAINTENANCE_OVERDUE"
+  | "MAINTENANCE_CRITICAL"
+  | "ODOMETER_GAP"
+  | "RECURRING_FAILURE"
+  | "RECENT_FAILURE"
+  | "NEVER_INSPECTED"
+  | "NEVER_MAINTAINED";
+
+export type FleetAlert = {
+  id: string;
+  vehicleId: string;
+  vehicleCode: string;
+  vehicleBrand: string | null;
+  vehicleModel: string | null;
+  type: AlertType;
+  severity: AlertSeverity;
+  title: string;
+  description: string;
+  suggestion: string;
+  daysSince?: number;
+  failedItems?: string[];
+  lastEventDate?: string;
+  odometerGap?: number;
+};
