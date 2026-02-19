@@ -467,10 +467,15 @@ export default function AdminPage() {
                     <strong>Security note:</strong> Changing a password will automatically log out that user on their next page load.
                   </div>
 
-                  <div className="mb-2 text-xs font-medium text-slate-500">{users.length} USERS</div>
+                  {/* Dev-role accounts are hidden from non-dev users */}
+                  {(() => {
+                    const visibleUsers = isDev ? (users as UserRow[]) : (users as UserRow[]).filter((u) => u.role !== "dev");
+                    return (
+                  <>
+                  <div className="mb-2 text-xs font-medium text-slate-500">{visibleUsers.length} USERS</div>
 
                   <div className="space-y-3">
-                    {(users as UserRow[]).map((user) => {
+                    {visibleUsers.map((user) => {
                       const editing = userEdits[user.id];
                       const isCurrentUser = user.id === session?.user.id;
 
@@ -582,6 +587,9 @@ export default function AdminPage() {
                       );
                     })}
                   </div>
+                  </>
+                  );
+                  })()}
                 </div>
 
                 {showAddUser && (

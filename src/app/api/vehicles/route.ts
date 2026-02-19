@@ -74,7 +74,7 @@ export async function POST(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Allow both admin and staff to create vehicles
-  if (!requireRole(session, ["admin", "staff"])) {
+  if (!requireRole(session, ["admin", "staff", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -153,7 +153,7 @@ export async function PUT(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Allow both admin and staff to edit vehicles
-  if (!requireRole(session, ["admin", "staff"])) {
+  if (!requireRole(session, ["admin", "staff", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -263,7 +263,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {

@@ -29,7 +29,7 @@ export default function BottomNav() {
     ...(role === "dev" ? [{ href: "/alerts", label: "Alerts", shortLabel: "Alerts", icon: "🔔", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100", badge: criticalCount }] : []),
   ];
 
-  if (role === "admin") {
+  if (role === "dev" || role === "admin") {
     navItems.push({ href: "/admin", label: "Admin", shortLabel: "Admin", icon: "⚙️", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100" });
   } else if (role === "staff") {
     navItems.push({ href: "/admin", label: "Manage", shortLabel: "Manage", icon: "📋", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100" });

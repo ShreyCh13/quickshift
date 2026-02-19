@@ -273,7 +273,7 @@ export async function GET(req: Request) {
   if (!["xlsx", "csv"].includes(format)) {
     return NextResponse.json({ error: "Invalid export format" }, { status: 400 });
   }
-  if (isEmptyFilters(filters) && !requireRole(session, ["admin"])) {
+  if (isEmptyFilters(filters) && !requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Admin required for full export" }, { status: 403 });
   }
 

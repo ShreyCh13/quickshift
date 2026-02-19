@@ -9,7 +9,7 @@ const PAGE_SIZE_DEFAULT = 50;
 export async function GET(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -20,12 +20,15 @@ export async function GET(req: Request) {
   const to = from + pageSize - 1;
 
   const supabase = getSupabaseAdmin();
-  // Return passwords only for admin users (internal tool requirement)
-  const { data, error, count } = await supabase
+  const isDev = session.user.role === "dev";
+  // Dev users are hidden from admins — only a dev can see other dev accounts
+  let query = supabase
     .from("users")
     .select("id, username, display_name, role, password, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
+  if (!isDev) query = query.neq("role", "dev");
+  const { data, error, count } = await query;
   if (error) {
     console.error("Failed to load users:", error);
     return NextResponse.json({ error: "Failed to load users" }, { status: 500 });
@@ -36,7 +39,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -72,7 +75,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
@@ -111,7 +114,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {

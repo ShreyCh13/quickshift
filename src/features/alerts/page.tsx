@@ -261,6 +261,11 @@ function HowItWorks() {
 
 export default function AlertsPage() {
   const router = useRouter();
+
+  // Synchronous gate — check role before any render, avoid flash of content
+  const initialSession = typeof window !== "undefined" ? loadSession() : null;
+  const isAuthorised = initialSession?.user.role === "dev";
+
   const [vehicles, setVehicles] = useState<VehicleHealth[]>([]);
   const [summary, setSummary] = useState<Summary>({ critical: 0, warning: 0, ok: 0, noData: 0, totalActive: 0 });
   const [filter, setFilter] = useState<Filter>("all");
@@ -269,11 +274,14 @@ export default function AlertsPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
-    const s = loadSession();
-    if (!s) { router.replace("/login"); return; }
-    if (s.user.role !== "dev") { router.replace("/"); return; }
+    if (!initialSession) { router.replace("/login"); return; }
+    if (!isAuthorised) { router.replace("/"); return; }
     fetchData();
-  }, [router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Render nothing while redirect is in flight
+  if (!isAuthorised) return null;
 
   async function fetchData() {
     setLoading(true);

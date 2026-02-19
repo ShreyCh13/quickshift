@@ -9,7 +9,7 @@ import { invalidateCache, cacheKeys } from "@/lib/cache";
 export async function POST(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin"])) {
+  if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   
