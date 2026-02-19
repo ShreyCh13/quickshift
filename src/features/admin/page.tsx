@@ -358,12 +358,6 @@ export default function AdminPage() {
                                 placeholder="Username"
                                 autoComplete="off"
                               />
-                              <input
-                                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
-                                value={editing.display_name}
-                                onChange={(e) => updateUserEdit(user.id, { display_name: e.target.value })}
-                                placeholder="Display Name"
-                              />
                               <select
                                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
                                 value={editing.role}
