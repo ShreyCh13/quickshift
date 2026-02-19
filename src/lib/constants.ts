@@ -64,8 +64,8 @@ export const SESSION_TTL_DAYS = 30;
 export const SESSION_TTL_MS = SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 export const DEFAULT_USERS = [
-  { username: "admin", password: "admin123", display_name: "Admin", role: "admin" },
-  { username: "mandu", password: "mandu123", display_name: "Mandu", role: "staff" },
+  { username: "admin", password: "admin123", display_name: "admin", role: "admin" },
+  { username: "mandu", password: "mandu123", display_name: "mandu", role: "staff" },
 ] as const;
 
 export const DEFAULT_REMARK_FIELDS = [

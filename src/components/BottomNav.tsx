@@ -14,17 +14,19 @@ export default function BottomNav() {
   useEffect(() => {
     const session = loadSession();
     setRole(session?.user.role ?? null);
-    fetch("/api/alerts", { headers: getSessionHeader() })
-      .then((r) => r.json())
-      .then((d) => setCriticalCount(d?.summary?.critical ?? 0))
-      .catch(() => null);
+    if (session?.user.role === "dev") {
+      fetch("/api/alerts", { headers: getSessionHeader() })
+        .then((r) => r.json())
+        .then((d) => setCriticalCount(d?.summary?.critical ?? 0))
+        .catch(() => null);
+    }
   }, []);
 
   const navItems: Array<{ href: string; label: string; shortLabel: string; icon: string; color: string; activeColor: string; badge?: number }> = [
     { href: "/vehicles", label: "Vehicles", shortLabel: "Cars", icon: "🚗", color: "text-slate-600", activeColor: "text-slate-900 bg-slate-100" },
     { href: "/inspections", label: "Inspections", shortLabel: "Inspect", icon: "📋", color: "text-blue-600", activeColor: "text-blue-700 bg-blue-100" },
     { href: "/maintenance", label: "Maintenance", shortLabel: "Maint", icon: "🔧", color: "text-emerald-600", activeColor: "text-emerald-700 bg-emerald-100" },
-    { href: "/alerts", label: "Alerts", shortLabel: "Alerts", icon: "🔔", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100", badge: criticalCount },
+    ...(role === "dev" ? [{ href: "/alerts", label: "Alerts", shortLabel: "Alerts", icon: "🔔", color: "text-orange-600", activeColor: "text-orange-700 bg-orange-100", badge: criticalCount }] : []),
   ];
 
   if (role === "admin") {

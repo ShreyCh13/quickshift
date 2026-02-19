@@ -22,20 +22,25 @@ export const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-export const userCreateSchema = z.object({
-  username: z.string().min(1),
-  password: z.string().min(1),
-  display_name: z.string().min(1),
-  role: z.enum(["admin", "staff"]),
-});
+export const userCreateSchema = z
+  .object({
+    username: z.string().min(1),
+    password: z.string().min(1),
+    role: z.enum(["admin", "staff"]),
+  })
+  .transform((data) => ({ ...data, display_name: data.username }));
 
-export const userUpdateSchema = z.object({
-  id: z.string().uuid(),
-  username: z.string().min(1).optional(),
-  password: z.string().min(1).optional(),
-  display_name: z.string().min(1).optional(),
-  role: z.enum(["admin", "staff"]).optional(),
-});
+export const userUpdateSchema = z
+  .object({
+    id: z.string().uuid(),
+    username: z.string().min(1).optional(),
+    password: z.string().min(1).optional(),
+    role: z.enum(["admin", "staff"]).optional(),
+  })
+  .transform((data) => {
+    const { username, ...rest } = data;
+    return username !== undefined ? { ...rest, username, display_name: username } : data;
+  });
 
 // ============================================================================
 // Vehicle Schemas

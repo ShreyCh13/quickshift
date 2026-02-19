@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
-import { requireSession } from "@/lib/auth";
+import { requireSession, requireRole } from "@/lib/auth";
 import { INSPECTION_CATEGORIES } from "@/lib/constants";
 import type { ChecklistItem } from "@/lib/types";
 
@@ -250,6 +250,7 @@ function analyseVehicle(
 export async function GET(req: Request) {
   const session = requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireRole(session, ["dev"])) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const supabase = getSupabaseAdmin();
 

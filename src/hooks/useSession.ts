@@ -9,7 +9,7 @@ interface UseSessionOptions {
   /** If true, redirect to login when no session (default: true) */
   requireAuth?: boolean;
   /** Roles that are allowed to access. If empty, any authenticated user is allowed */
-  allowedRoles?: Array<"admin" | "staff">;
+  allowedRoles?: Array<"admin" | "staff" | "dev">;
   /** URL to redirect to when unauthorized (default: "/login") */
   redirectTo?: string;
 }

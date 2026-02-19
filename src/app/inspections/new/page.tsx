@@ -114,6 +114,11 @@ function NewInspectionForm() {
       return;
     }
 
+    if (!driverName.trim()) {
+      setError("Driver name is required");
+      return;
+    }
+
     // Validate: failed items must have remarks
     const missingRemarks = categories.flatMap((cat) =>
       cat.fields.filter((f) => {
@@ -130,10 +135,22 @@ function NewInspectionForm() {
     setLoading(true);
     setError(null);
 
+    // Auto-add driver to list if they typed a new name not already saved
+    const trimmedDriver = driverName.trim();
+    try {
+      const existing = await fetchDriverSuggestions(trimmedDriver);
+      const alreadyExists = existing.some((n) => n.toLowerCase() === trimmedDriver.toLowerCase());
+      if (!alreadyExists) {
+        await addDriver(trimmedDriver);
+      }
+    } catch {
+      // Non-fatal — driver name still saved on the inspection record
+    }
+
     const res = await createInspection({
       vehicle_id: vehicleId,
       odometer_km: Number(odometerKm),
-      driver_name: driverName.trim() || null,
+      driver_name: trimmedDriver,
       remarks_json: checklist,
     });
 
@@ -198,6 +215,7 @@ function NewInspectionForm() {
                 fetchSuggestions={fetchDriverSuggestions}
                 placeholder="Search or add driver..."
                 accentColor="blue"
+                required
               />
 
               <div className="rounded-lg bg-slate-50 p-3">

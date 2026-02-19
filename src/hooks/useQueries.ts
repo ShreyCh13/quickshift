@@ -528,7 +528,7 @@ export function useAnalytics(filters?: Record<string, unknown>) {
 export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { username: string; password: string; display_name: string; role: string }) =>
+    mutationFn: (data: { username: string; password: string; role: string }) =>
       fetchWithSession("/api/users", { method: "POST", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });
@@ -539,7 +539,7 @@ export function useCreateUser() {
 export function useUpdateUser() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; username?: string; display_name?: string; role?: string; password?: string }) =>
+    mutationFn: (data: { id: string; username?: string; role?: string; password?: string }) =>
       fetchWithSession("/api/users", { method: "PUT", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all });

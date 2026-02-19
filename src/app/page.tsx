@@ -27,7 +27,7 @@ export default function Home() {
     }
     setSession(s);
     loadVehicles();
-    loadAlertSummary();
+    if (s.user.role === "dev") loadAlertSummary();
   }, [router]);
 
   async function loadVehicles() {
@@ -187,18 +187,29 @@ export default function Home() {
               <span className="text-2xl">📊</span>
               <span className="mt-1 text-sm font-bold text-purple-600">Analytics</span>
             </button>
-            <button
-              onClick={() => router.push("/alerts")}
-              className="relative flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
-            >
-              <span className="text-2xl">🔔</span>
-              <span className="mt-1 text-sm font-bold text-orange-600">Fleet Alerts</span>
-              {alertSummary && alertSummary.critical > 0 && (
-                <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                  {alertSummary.critical > 9 ? "9+" : alertSummary.critical}
-                </span>
-              )}
-            </button>
+            {session?.user.role === "dev" && (
+              <button
+                onClick={() => router.push("/alerts")}
+                className="relative flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
+              >
+                <span className="text-2xl">🔔</span>
+                <span className="mt-1 text-sm font-bold text-orange-600">Fleet Health</span>
+                {alertSummary && alertSummary.critical > 0 && (
+                  <span className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                    {alertSummary.critical > 9 ? "9+" : alertSummary.critical}
+                  </span>
+                )}
+              </button>
+            )}
+            {session?.user.role !== "dev" && (
+              <button
+                onClick={() => router.push("/settings")}
+                className="flex flex-col items-center justify-center rounded-xl bg-white p-4 shadow transition hover:shadow-md"
+              >
+                <span className="text-2xl">⚙️</span>
+                <span className="mt-1 text-sm font-bold text-slate-600">Settings</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

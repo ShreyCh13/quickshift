@@ -57,12 +57,12 @@ export default function AdminPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [userEdits, setUserEdits] = useState<
-    Record<string, { username: string; display_name: string; role: UserRow["role"]; password: string }>
+    Record<string, { username: string; role: UserRow["role"]; password: string }>
   >({});
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("users");
   const [showAddUser, setShowAddUser] = useState(false);
-  const [newUser, setNewUser] = useState({ username: "", password: "", display_name: "", role: "staff" });
+  const [newUser, setNewUser] = useState({ username: "", password: "", role: "staff" });
   const [newDriverName, setNewDriverName] = useState("");
   const [editDriverId, setEditDriverId] = useState<string | null>(null);
   const [editDriverName, setEditDriverName] = useState("");
@@ -134,15 +134,15 @@ export default function AdminPage() {
     const s = loadSession();
     if (!s) { router.replace("/login"); return; }
     setSession(s);
-    // Staff land on drivers tab by default
-    if (s.user.role !== "admin") setActiveTab("drivers");
+    // Staff land on drivers tab by default; dev and admin land on users tab
+    if (s.user.role === "staff") setActiveTab("drivers");
   }, [router]);
 
   // ---- User actions ----
   function startUserEdit(user: UserRow) {
     setUserEdits((prev) => ({
       ...prev,
-      [user.id]: { username: user.username, display_name: user.display_name, role: user.role, password: "" },
+      [user.id]: { username: user.username, role: user.role, password: "" },
     }));
   }
 
@@ -150,17 +150,16 @@ export default function AdminPage() {
     setUserEdits((prev) => { const n = { ...prev }; delete n[id]; return n; });
   }
 
-  function updateUserEdit(id: string, patch: Partial<{ username: string; display_name: string; role: UserRow["role"]; password: string }>) {
+  function updateUserEdit(id: string, patch: Partial<{ username: string; role: UserRow["role"]; password: string }>) {
     setUserEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
   }
 
   async function handleSaveUser(userId: string) {
     const editing = userEdits[userId];
     if (!editing) return;
-    const payload: { id: string; username?: string; display_name?: string; role?: string; password?: string } = {
+    const payload: { id: string; username?: string; role?: string; password?: string } = {
       id: userId,
       username: editing.username,
-      display_name: editing.display_name,
       role: editing.role,
     };
     if (editing.password.trim()) payload.password = editing.password;
@@ -174,14 +173,14 @@ export default function AdminPage() {
   }
 
   async function handleCreateUser() {
-    if (!newUser.username.trim() || !newUser.password.trim() || !newUser.display_name.trim()) {
-      setError("All fields are required");
+    if (!newUser.username.trim() || !newUser.password.trim()) {
+      setError("Name and password are required");
       return;
     }
     setError(null);
     try {
       await createUserMutation.mutateAsync(newUser);
-      setNewUser({ username: "", password: "", display_name: "", role: "staff" });
+      setNewUser({ username: "", password: "", role: "staff" });
       setShowAddUser(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create user");
@@ -396,8 +395,14 @@ export default function AdminPage() {
 
   if (!session) return null;
 
-  const isAdmin = session.user.role === "admin";
-  const TABS = isAdmin ? ADMIN_TABS : STAFF_TABS;
+  const isAdmin = session.user.role === "admin" || session.user.role === "dev";
+  const isDev = session.user.role === "dev";
+  // Dev sees all tabs; admin sees all except Sheet; staff see only their subset
+  const TABS = isDev
+    ? ADMIN_TABS
+    : isAdmin
+    ? ADMIN_TABS.filter((t) => t.key !== "sheet")
+    : STAFF_TABS;
 
   const tabLoading = activeTab === "users" ? usersLoading
     : activeTab === "drivers" ? driversLoading
@@ -477,8 +482,7 @@ export default function AdminPage() {
                                 {user.role === "admin" ? "👑" : "👤"}
                               </div>
                               <div>
-                                <div className="font-bold text-slate-900">{user.display_name}</div>
-                                <div className="text-sm text-slate-500">@{user.username}</div>
+                                <div className="font-bold text-slate-900">{editing ? editing.username : user.username}</div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -497,7 +501,7 @@ export default function AdminPage() {
                                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
                                 value={editing.username}
                                 onChange={(e) => updateUserEdit(user.id, { username: e.target.value })}
-                                placeholder="Username"
+                                placeholder="Name"
                                 autoComplete="off"
                               />
                               <select
@@ -584,9 +588,8 @@ export default function AdminPage() {
                   <div className="rounded-xl bg-emerald-50 p-4 shadow">
                     <h3 className="mb-3 font-bold text-slate-900">Add New User</h3>
                     <div className="space-y-3">
-                      <FormField label="Username" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} placeholder="Enter username" />
+                      <FormField label="Name" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} placeholder="Enter name" />
                       <FormField label="Password" type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="Enter password" />
-                      <FormField label="Display Name" value={newUser.display_name} onChange={(e) => setNewUser({ ...newUser, display_name: e.target.value })} placeholder="Enter display name" />
                       <label className="block">
                         <span className="mb-1 block text-sm font-medium text-slate-700">Role</span>
                         <select

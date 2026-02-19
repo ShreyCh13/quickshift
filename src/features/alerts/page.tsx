@@ -269,7 +269,9 @@ export default function AlertsPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
-    if (!loadSession()) { router.replace("/login"); return; }
+    const s = loadSession();
+    if (!s) { router.replace("/login"); return; }
+    if (s.user.role !== "dev") { router.replace("/"); return; }
     fetchData();
   }, [router]);
 
