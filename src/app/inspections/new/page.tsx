@@ -102,6 +102,9 @@ function NewInspectionForm() {
 
   function setItem(key: string, patch: Partial<ChecklistItem>) {
     setChecklist((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  }
+
+  function touchItem(key: string) {
     setTouched((prev) => new Set(prev).add(key));
   }
 
@@ -239,7 +242,20 @@ function NewInspectionForm() {
                         {/* Checkbox */}
                         <button
                           type="button"
-                          onClick={() => setItem(field.key, { ok: !item.ok, remarks: item.ok ? item.remarks : "" })}
+                          onClick={() => {
+                            if (!item.ok && !touched.has(field.key)) {
+                              // First tap on a ✗ item: open remarks textarea, stay ✗
+                              touchItem(field.key);
+                            } else if (!item.ok && touched.has(field.key)) {
+                              // Second tap: mark as ✓ OK, clear remarks
+                              setItem(field.key, { ok: true, remarks: "" });
+                              setTouched((prev) => { const n = new Set(prev); n.delete(field.key); return n; });
+                            } else {
+                              // Currently ✓: toggle to ✗ and open remarks
+                              setItem(field.key, { ok: false, remarks: "" });
+                              touchItem(field.key);
+                            }
+                          }}
                           className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-all ${
                             item.ok
                               ? "border-emerald-500 bg-emerald-500 text-white"
@@ -248,12 +264,17 @@ function NewInspectionForm() {
                         >
                           {item.ok ? "✓" : "✗"}
                         </button>
-                        <span className={`flex-1 text-sm font-medium ${item.ok ? "text-slate-700" : "text-red-700"}`}>
-                          {field.label}
-                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className={`text-sm font-medium ${item.ok ? "text-slate-700" : "text-red-700"}`}>
+                            {field.label}
+                          </span>
+                          {!item.ok && !touched.has(field.key) && (
+                            <span className="ml-2 text-xs text-red-400">tap ✗ to add issue / tap ✓ to pass</span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Remarks field — shown only when explicitly marked as failed */}
+                      {/* Remarks field — shown after first tap on a ✗ item */}
                       {!item.ok && touched.has(field.key) && (
                         <div className="mt-2 pl-10">
                           <textarea
@@ -262,7 +283,9 @@ function NewInspectionForm() {
                             placeholder="Describe the issue (required) *"
                             rows={2}
                             className="w-full rounded-lg border-2 border-red-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none"
+                            autoFocus
                           />
+                          <p className="mt-1 text-xs text-slate-400">Tap ✗ again to mark as ✓ OK instead</p>
                         </div>
                       )}
                     </div>

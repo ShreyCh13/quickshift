@@ -4,253 +4,254 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { loadSession, getSessionHeader } from "@/lib/auth";
 import MobileShell from "@/components/MobileShell";
-import type { FleetAlert, AlertSeverity } from "@/lib/types";
+import type { VehicleHealth, IssueSeverity } from "@/app/api/alerts/route";
 
 // ============================================================
-// Icons
+// Types
 // ============================================================
 
-function IconClipboard({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-    </svg>
-  );
-}
-
-function IconWrench({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-  );
-}
-
-function IconGauge({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
-function IconRepeat({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-    </svg>
-  );
-}
-
-function IconExclamation({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-    </svg>
-  );
-}
-
-function IconInfo({ className }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  );
-}
-
-// ============================================================
-// Config maps
-// ============================================================
-
-const ALERT_ICONS: Record<string, (p: { className?: string }) => React.ReactElement> = {
-  INSPECTION_OVERDUE: IconClipboard,
-  INSPECTION_CRITICAL: IconClipboard,
-  MAINTENANCE_OVERDUE: IconWrench,
-  MAINTENANCE_CRITICAL: IconWrench,
-  ODOMETER_GAP: IconGauge,
-  RECURRING_FAILURE: IconRepeat,
-  RECENT_FAILURE: IconExclamation,
-  NEVER_INSPECTED: IconClipboard,
-  NEVER_MAINTAINED: IconWrench,
+type Summary = {
+  critical: number;
+  warning: number;
+  ok: number;
+  noData: number;
+  totalActive: number;
 };
 
-const SEVERITY_CONFIG = {
-  critical: {
-    border: "border-l-red-500",
-    bg: "bg-red-50",
-    badge: "bg-red-100 text-red-700",
-    icon: "text-red-500",
-    dot: "bg-red-500",
-    label: "Critical",
-    summaryBg: "bg-red-50 border border-red-200",
-    summaryText: "text-red-700",
-    summaryNum: "text-red-600",
-  },
-  warning: {
-    border: "border-l-amber-500",
-    bg: "bg-amber-50",
-    badge: "bg-amber-100 text-amber-700",
-    icon: "text-amber-500",
-    dot: "bg-amber-500",
-    label: "Warning",
-    summaryBg: "bg-amber-50 border border-amber-200",
-    summaryText: "text-amber-700",
-    summaryNum: "text-amber-600",
-  },
-  info: {
-    border: "border-l-blue-400",
-    bg: "bg-blue-50",
-    badge: "bg-blue-100 text-blue-700",
-    icon: "text-blue-500",
-    dot: "bg-blue-400",
-    label: "Info",
-    summaryBg: "bg-blue-50 border border-blue-200",
-    summaryText: "text-blue-700",
-    summaryNum: "text-blue-600",
-  },
-};
-
-const ACTION_LABEL: Record<string, { label: string; param: string }> = {
-  INSPECTION_OVERDUE: { label: "Inspect Now", param: "inspections" },
-  INSPECTION_CRITICAL: { label: "Inspect Now", param: "inspections" },
-  RECURRING_FAILURE: { label: "Inspect Now", param: "inspections" },
-  RECENT_FAILURE: { label: "Inspect Now", param: "inspections" },
-  NEVER_INSPECTED: { label: "Add Inspection", param: "inspections" },
-  MAINTENANCE_OVERDUE: { label: "Log Service", param: "maintenance" },
-  MAINTENANCE_CRITICAL: { label: "Log Service", param: "maintenance" },
-  ODOMETER_GAP: { label: "Log Service", param: "maintenance" },
-  NEVER_MAINTAINED: { label: "Log Service", param: "maintenance" },
-};
+type Filter = "all" | "critical" | "warning";
 
 // ============================================================
-// Alert Card
+// Vehicle Health Card — compact, all issues in one card
 // ============================================================
 
-function AlertCard({ alert, onAction }: { alert: FleetAlert; onAction: (vehicleId: string, type: "inspections" | "maintenance") => void }) {
-  const sev = SEVERITY_CONFIG[alert.severity];
-  const Icon = ALERT_ICONS[alert.type] ?? IconExclamation;
-  const action = ACTION_LABEL[alert.type];
+function HealthCard({ vehicle }: { vehicle: VehicleHealth }) {
+  const isCritical = vehicle.status === "critical";
 
   return (
-    <div className={`rounded-xl border-l-4 bg-white shadow-sm ${sev.border} overflow-hidden`}>
+    <div
+      className={`rounded-xl bg-white shadow-sm ring-1 overflow-hidden ${
+        isCritical ? "ring-red-200" : "ring-amber-200"
+      }`}
+    >
+      {/* Colour stripe */}
+      <div className={`h-1 w-full ${isCritical ? "bg-red-500" : "bg-amber-400"}`} />
+
       <div className="p-4">
-        {/* Header row */}
-        <div className="mb-2 flex items-start gap-3">
-          <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 ${sev.bg}`}>
-            <Icon className={`h-4 w-4 ${sev.icon}`} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${sev.badge}`}>
-                {sev.label}
+        {/* Vehicle identity */}
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2">
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                  isCritical ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {isCritical ? "Needs attention" : "Review soon"}
               </span>
-              <span className="truncate font-mono text-sm font-bold text-slate-800">
-                {alert.vehicleCode}
-              </span>
-              {(alert.vehicleBrand || alert.vehicleModel) && (
-                <span className="truncate text-xs text-slate-500">
-                  {[alert.vehicleBrand, alert.vehicleModel].filter(Boolean).join(" ")}
-                </span>
-              )}
             </div>
-            <p className="mt-1 text-sm font-semibold text-slate-800">{alert.title}</p>
-          </div>
-        </div>
-
-        {/* Description */}
-        <p className="mb-2 text-sm text-slate-600">{alert.description}</p>
-
-        {/* Failed items chips */}
-        {alert.failedItems && alert.failedItems.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1">
-            {alert.failedItems.slice(0, 5).map((item) => (
-              <span key={item} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                {item}
-              </span>
-            ))}
-            {alert.failedItems.length > 5 && (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
-                +{alert.failedItems.length - 5} more
-              </span>
+            <p className="mt-1 font-mono text-base font-bold text-slate-900">{vehicle.vehicleCode}</p>
+            {(vehicle.vehicleBrand || vehicle.vehicleModel) && (
+              <p className="text-xs text-slate-500">
+                {[vehicle.vehicleBrand, vehicle.vehicleModel].filter(Boolean).join(" ")}
+              </p>
             )}
           </div>
-        )}
-
-        {/* Suggestion */}
-        <div className={`mb-3 rounded-lg px-3 py-2 ${sev.bg}`}>
-          <p className="text-xs font-medium text-slate-700">
-            <span className="mr-1 opacity-60">Suggestion:</span>
-            {alert.suggestion}
-          </p>
+          {/* Last activity snapshot */}
+          <div className="shrink-0 text-right text-[11px] text-slate-400 leading-tight">
+            {vehicle.daysSinceInspection != null && (
+              <p>Inspect: {vehicle.daysSinceInspection}d ago</p>
+            )}
+            {vehicle.daysSinceMaintenance != null && (
+              <p>Service: {vehicle.daysSinceMaintenance}d ago</p>
+            )}
+          </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-2">
-          {alert.lastEventDate ? (
-            <p className="text-xs text-slate-400">
-              Last event: {new Date(alert.lastEventDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
-            </p>
-          ) : (
-            <span />
-          )}
-          {action && (
-            <button
-              onClick={() => onAction(alert.vehicleId, action.param as "inspections" | "maintenance")}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition active:opacity-80 ${
-                alert.severity === "critical" ? "bg-red-500" : alert.severity === "warning" ? "bg-amber-500" : "bg-blue-500"
-              }`}
-            >
-              {action.label}
-            </button>
-          )}
+        {/* Issues list */}
+        <ul className="space-y-1.5">
+          {vehicle.issues.map((issue, idx) => (
+            <li key={idx} className="flex items-start gap-2 text-sm">
+              <IssueIcon severity={issue.severity} />
+              <span className="leading-snug text-slate-700">{issue.text}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function IssueIcon({ severity }: { severity: IssueSeverity }) {
+  if (severity === "critical") {
+    return (
+      <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-red-100">
+        <svg className="h-2.5 w-2.5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+        </svg>
+      </span>
+    );
+  }
+  return (
+    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-100">
+      <svg className="h-2.5 w-2.5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+        <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+      </svg>
+    </span>
+  );
+}
+
+// ============================================================
+// Fleet health bar
+// ============================================================
+
+function HealthBar({ summary }: { summary: Summary }) {
+  const withData = summary.totalActive - summary.noData;
+  const healthyPct = withData > 0 ? Math.round((summary.ok / withData) * 100) : 100;
+
+  let grade: string;
+  let gradeColor: string;
+  let barColor: string;
+
+  if (healthyPct >= 85) {
+    grade = "Good"; gradeColor = "text-emerald-700"; barColor = "bg-emerald-500";
+  } else if (healthyPct >= 60) {
+    grade = "Fair"; gradeColor = "text-amber-700"; barColor = "bg-amber-400";
+  } else {
+    grade = "Poor"; gradeColor = "text-red-700"; barColor = "bg-red-500";
+  }
+
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Fleet health</p>
+          <p className={`text-2xl font-bold ${gradeColor}`}>{grade}</p>
         </div>
+        <div className="text-right">
+          <p className="text-3xl font-bold text-slate-800">{healthyPct}<span className="text-lg text-slate-400">%</span></p>
+          <p className="text-xs text-slate-400">vehicles OK</p>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="mb-3 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full transition-all ${barColor}`}
+          style={{ width: `${healthyPct}%` }}
+        />
+      </div>
+
+      {/* Breakdown pills */}
+      <div className="flex gap-2 text-xs">
+        <span className="flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 font-semibold text-red-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+          {summary.critical} critical
+        </span>
+        <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 font-semibold text-amber-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          {summary.warning} warnings
+        </span>
+        <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 font-semibold text-emerald-700">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          {summary.ok} ok
+        </span>
       </div>
     </div>
   );
 }
 
 // ============================================================
-// Summary Card
+// Filter Tabs
 // ============================================================
 
-function SummaryCard({
-  count,
-  label,
-  severity,
-  isActive,
-  onClick,
+function FilterTabs({
+  filter,
+  setFilter,
+  counts,
 }: {
-  count: number;
-  label: string;
-  severity: AlertSeverity | "all";
-  isActive: boolean;
-  onClick: () => void;
+  filter: Filter;
+  setFilter: (f: Filter) => void;
+  counts: { all: number; critical: number; warning: number };
 }) {
-  if (severity === "all") {
-    return (
-      <button
-        onClick={onClick}
-        className={`flex flex-1 flex-col items-center rounded-xl border-2 p-3 transition ${
-          isActive ? "border-slate-400 bg-slate-100" : "border-slate-200 bg-white"
-        }`}
-      >
-        <span className="text-xl font-bold text-slate-800">{count}</span>
-        <span className="text-xs font-medium text-slate-500">All</span>
-      </button>
-    );
-  }
-  const cfg = SEVERITY_CONFIG[severity];
+  const tabs: { id: Filter; label: string; count: number }[] = [
+    { id: "all", label: "All", count: counts.all },
+    { id: "critical", label: "Critical", count: counts.critical },
+    { id: "warning", label: "Warnings", count: counts.warning },
+  ];
+
+  return (
+    <div className="flex gap-1.5">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          onClick={() => setFilter(tab.id)}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold transition ${
+            filter === tab.id
+              ? tab.id === "critical"
+                ? "bg-red-500 text-white"
+                : tab.id === "warning"
+                ? "bg-amber-400 text-white"
+                : "bg-slate-800 text-white"
+              : "bg-white text-slate-600 ring-1 ring-slate-200"
+          }`}
+        >
+          {tab.label}
+          {tab.count > 0 && (
+            <span className={`ml-1 ${filter === tab.id ? "opacity-80" : "opacity-60"}`}>
+              ({tab.count})
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ============================================================
+// No-data section (collapsed by default)
+// ============================================================
+
+function NoDataSection({ count }: { count: number }) {
+  const [open, setOpen] = useState(false);
+  if (count === 0) return null;
+
   return (
     <button
-      onClick={onClick}
-      className={`flex flex-1 flex-col items-center rounded-xl border-2 p-3 transition ${
-        isActive ? `border-current ${cfg.summaryBg}` : "border-slate-200 bg-white"
-      }`}
+      onClick={() => setOpen((o) => !o)}
+      className="flex w-full items-center justify-between rounded-xl bg-white px-4 py-3 text-left shadow-sm ring-1 ring-slate-200"
     >
-      <span className={`text-xl font-bold ${cfg.summaryNum}`}>{count}</span>
-      <span className={`text-xs font-medium ${cfg.summaryText}`}>{label}</span>
+      <span className="text-sm text-slate-500">
+        <span className="font-semibold text-slate-700">{count} vehicle{count > 1 ? "s" : ""}</span> with no records yet
+      </span>
+      <svg
+        className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
     </button>
+  );
+}
+
+// ============================================================
+// How it works section
+// ============================================================
+
+function HowItWorks() {
+  return (
+    <details className="rounded-xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-200">
+      <summary className="cursor-pointer text-sm font-semibold text-slate-700 select-none">
+        How is this calculated?
+      </summary>
+      <div className="mt-3 space-y-2 text-xs text-slate-500">
+        <p><strong className="text-slate-700">Inspection timing</strong> — compares days since last inspection against that vehicle&apos;s own average inspection interval. No fixed deadline — each vehicle is judged by its own history.</p>
+        <p><strong className="text-slate-700">Recurring issues</strong> — flags any checklist item that failed in 2 of the last 3 inspections. Indicates a persistent problem, not a one-off.</p>
+        <p><strong className="text-slate-700">Recent failures</strong> — surfaces failed checklist items from inspections in the last 10 days. Safety-critical items (brakes, tyres, seat belts, dashboard warnings) are always escalated.</p>
+        <p><strong className="text-slate-700">Service overdue</strong> — flags vehicles with no maintenance logged in 90+ days (warning) or 180+ days (critical).</p>
+        <p><strong className="text-slate-700">Odometer gap</strong> — if the vehicle&apos;s odometer at last inspection is 5,000+ km ahead of the last service reading, a service may be due.</p>
+        <p className="mt-2 italic">Vehicles with no data at all are not counted — they can&apos;t be analysed without a baseline.</p>
+      </div>
+    </details>
   );
 }
 
@@ -258,35 +259,29 @@ function SummaryCard({
 // Main Page
 // ============================================================
 
-type Filter = "all" | AlertSeverity;
-
 export default function AlertsPage() {
   const router = useRouter();
-  const [alerts, setAlerts] = useState<FleetAlert[]>([]);
-  const [summary, setSummary] = useState({ critical: 0, warning: 0, info: 0, total: 0 });
+  const [vehicles, setVehicles] = useState<VehicleHealth[]>([]);
+  const [summary, setSummary] = useState<Summary>({ critical: 0, warning: 0, ok: 0, noData: 0, totalActive: 0 });
   const [filter, setFilter] = useState<Filter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
   useEffect(() => {
-    const session = loadSession();
-    if (!session) {
-      router.replace("/login");
-      return;
-    }
-    fetchAlerts();
+    if (!loadSession()) { router.replace("/login"); return; }
+    fetchData();
   }, [router]);
 
-  async function fetchAlerts() {
+  async function fetchData() {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/alerts", { headers: getSessionHeader() });
-      if (!res.ok) throw new Error("Failed to load alerts");
+      if (!res.ok) throw new Error("Failed to load");
       const data = await res.json();
-      setAlerts(data.alerts ?? []);
-      setSummary(data.summary ?? { critical: 0, warning: 0, info: 0, total: 0 });
+      setVehicles(data.vehicles ?? []);
+      setSummary(data.summary ?? { critical: 0, warning: 0, ok: 0, noData: 0, totalActive: 0 });
       setLastRefreshed(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
@@ -295,128 +290,104 @@ export default function AlertsPage() {
     }
   }
 
-  const filtered = useMemo(
-    () => (filter === "all" ? alerts : alerts.filter((a) => a.severity === filter)),
-    [alerts, filter]
-  );
+  const filtered = useMemo(() => {
+    if (filter === "all") return vehicles;
+    return vehicles.filter((v) => v.status === filter);
+  }, [vehicles, filter]);
 
-  function handleAction(vehicleId: string, type: "inspections" | "maintenance") {
-    router.push(`/${type}/new?vehicle=${vehicleId}`);
-  }
+  const counts = useMemo(() => ({
+    all: vehicles.length,
+    critical: vehicles.filter((v) => v.status === "critical").length,
+    warning: vehicles.filter((v) => v.status === "warning").length,
+  }), [vehicles]);
 
   return (
-    <MobileShell title="Fleet Alerts">
-      <div className="min-h-screen bg-gradient-to-b from-orange-50 to-white pb-24">
-        <div className="mx-auto max-w-lg space-y-4 p-4">
+    <MobileShell title="Fleet Health">
+      <div className="min-h-screen bg-slate-50 pb-28">
+        <div className="mx-auto max-w-lg space-y-3 p-4 pt-3">
+
           {/* Header */}
-          <div className="flex items-center justify-between pt-2">
+          <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Fleet Alerts</h1>
-              <p className="text-sm text-slate-500">Smart maintenance & inspection recommendations</p>
+              <h1 className="text-xl font-bold text-slate-900">Fleet Health</h1>
+              {lastRefreshed && !loading && (
+                <p className="text-xs text-slate-400">
+                  Updated {lastRefreshed.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
+                </p>
+              )}
             </div>
             <button
-              onClick={fetchAlerts}
+              onClick={fetchData}
               disabled={loading}
-              className="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-slate-200 transition active:bg-slate-50 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200 transition active:bg-slate-50 disabled:opacity-40"
             >
-              <svg
-                className={`h-4 w-4 text-slate-500 ${loading ? "animate-spin" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
+              <svg className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
               Refresh
             </button>
           </div>
 
-          {/* Last refreshed */}
-          {lastRefreshed && !loading && (
-            <p className="text-xs text-slate-400">
-              Updated {lastRefreshed.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
-            </p>
-          )}
-
-          {/* Summary cards */}
-          <div className="flex gap-2">
-            <SummaryCard count={summary.total} label="All" severity="all" isActive={filter === "all"} onClick={() => setFilter("all")} />
-            <SummaryCard count={summary.critical} label="Critical" severity="critical" isActive={filter === "critical"} onClick={() => setFilter("critical")} />
-            <SummaryCard count={summary.warning} label="Warnings" severity="warning" isActive={filter === "warning"} onClick={() => setFilter("warning")} />
-            <SummaryCard count={summary.info} label="Info" severity="info" isActive={filter === "info"} onClick={() => setFilter("info")} />
-          </div>
-
-          {/* Loading state */}
+          {/* Loading skeleton */}
           {loading && (
             <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-36 animate-pulse rounded-xl bg-slate-200" />
+              <div className="h-28 animate-pulse rounded-xl bg-slate-200" />
+              <div className="h-10 animate-pulse rounded-lg bg-slate-200" />
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-32 animate-pulse rounded-xl bg-slate-200" />
               ))}
             </div>
           )}
 
-          {/* Error state */}
+          {/* Error */}
           {!loading && error && (
             <div className="rounded-xl bg-red-50 p-4 text-center">
               <p className="text-sm font-medium text-red-700">{error}</p>
-              <button onClick={fetchAlerts} className="mt-2 text-sm font-semibold text-red-600 underline">
-                Retry
-              </button>
+              <button onClick={fetchData} className="mt-2 text-sm font-semibold text-red-600 underline">Retry</button>
             </div>
           )}
 
-          {/* Empty state */}
-          {!loading && !error && filtered.length === 0 && (
-            <div className="rounded-2xl bg-white p-10 text-center shadow-sm">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-                <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-bold text-slate-800">
-                {filter === "all" ? "All clear!" : `No ${filter} alerts`}
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                {filter === "all"
-                  ? "Your fleet is up to date. No action needed right now."
-                  : `No ${filter}-level alerts at this time.`}
-              </p>
-            </div>
-          )}
+          {/* Content */}
+          {!loading && !error && (
+            <>
+              <HealthBar summary={summary} />
 
-          {/* Alert list */}
-          {!loading && !error && filtered.length > 0 && (
-            <div className="space-y-3">
-              {/* Group label */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-slate-600">
-                  {filtered.length} alert{filtered.length !== 1 ? "s" : ""}
-                  {filter !== "all" ? ` · ${filter}` : ""}
-                </p>
-              </div>
+              {vehicles.length > 0 && (
+                <FilterTabs filter={filter} setFilter={setFilter} counts={counts} />
+              )}
 
-              {filtered.map((alert) => (
-                <AlertCard key={alert.id} alert={alert} onAction={handleAction} />
-              ))}
-            </div>
-          )}
+              {/* All clear */}
+              {filtered.length === 0 && (
+                <div className="rounded-xl bg-white p-8 text-center shadow-sm ring-1 ring-slate-200">
+                  <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">
+                    <svg className="h-7 w-7 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="font-semibold text-slate-800">
+                    {filter === "all" ? "All vehicles are in good shape" : `No ${filter} issues`}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-400">Nothing needs attention right now.</p>
+                </div>
+              )}
 
-          {/* How alerts work */}
-          {!loading && (
-            <details className="rounded-xl bg-white px-4 py-3 shadow-sm">
-              <summary className="cursor-pointer text-sm font-semibold text-slate-700 select-none">
-                How are alerts calculated?
-              </summary>
-              <div className="mt-3 space-y-2 text-xs text-slate-500">
-                <p><strong className="text-slate-700">Inspection overdue</strong> — no inspection in 30 days (warning) or 60 days (critical).</p>
-                <p><strong className="text-slate-700">Maintenance overdue</strong> — no service in 90 days (warning) or 180 days (critical).</p>
-                <p><strong className="text-slate-700">Recent failures</strong> — latest inspection (within 14 days) had failed checklist items.</p>
-                <p><strong className="text-slate-700">Chronic issues</strong> — same checklist item failed in 2 of the last 3 inspections.</p>
-                <p><strong className="text-slate-700">Odometer gap</strong> — vehicle has been driven 5,000+ km since the last recorded service.</p>
-                <p><strong className="text-slate-700">No history</strong> — vehicle has no inspections or maintenance on record at all.</p>
-              </div>
-            </details>
+              {/* Vehicle cards */}
+              {filtered.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500">
+                    {filtered.length} vehicle{filtered.length !== 1 ? "s" : ""} need{filtered.length === 1 ? "s" : ""} attention
+                  </p>
+                  {filtered.map((v) => (
+                    <HealthCard key={v.vehicleId} vehicle={v} />
+                  ))}
+                </div>
+              )}
+
+              {/* No-data vehicles — collapsed, not cluttering the list */}
+              <NoDataSection count={summary.noData} />
+
+              <HowItWorks />
+            </>
           )}
         </div>
       </div>

@@ -2,78 +2,43 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { requireSession } from "@/lib/auth";
 import { INSPECTION_CATEGORIES } from "@/lib/constants";
-import type { FleetAlert, AlertType, AlertSeverity, ChecklistItem } from "@/lib/types";
+import type { ChecklistItem } from "@/lib/types";
 
 // ============================================================
 // Thresholds
 // ============================================================
 
-const INSPECTION_WARNING_DAYS = 30;
-const INSPECTION_CRITICAL_DAYS = 60;
+/** Days beyond a vehicle's OWN average inspection interval before we flag it */
+const INSPECTION_OVERDUE_FACTOR = 1.4;
+/** Fallback if not enough history: flag after N days */
+const INSPECTION_FALLBACK_WARNING_DAYS = 21;
+const INSPECTION_FALLBACK_CRITICAL_DAYS = 45;
+/** Maintenance thresholds (always fixed — no good baseline) */
 const MAINTENANCE_WARNING_DAYS = 90;
 const MAINTENANCE_CRITICAL_DAYS = 180;
+/** Odometer gap since last service */
 const ODOMETER_GAP_KM = 5000;
-const RECURRING_FAILURE_MIN_COUNT = 2;
-const RECURRING_FAILURE_LOOK_BACK = 3;
+/** Recurring failure: same item failed in N of last M inspections */
+const RECURRING_COUNT = 2;
+const RECURRING_LOOK_BACK = 3;
+/** Safety-critical checklist keys — treated as critical even on single failure */
+const SAFETY_CRITICAL_KEYS = new Set([
+  "brake_lights", "foot_brake", "seat_belts", "dashboard_warning",
+  "brake_performance", "steering", "tyres",
+]);
 
 // ============================================================
-// Helpers
+// Types (internal to this file)
 // ============================================================
 
-function daysSince(dateStr: string): number {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function makeAlert(
-  vehicleId: string,
-  vehicleCode: string,
-  vehicleBrand: string | null,
-  vehicleModel: string | null,
-  type: AlertType,
-  severity: AlertSeverity,
-  title: string,
-  description: string,
-  suggestion: string,
-  extras: Partial<Pick<FleetAlert, "daysSince" | "failedItems" | "lastEventDate" | "odometerGap">> = {}
-): FleetAlert {
-  return {
-    id: `${vehicleId}-${type}`,
-    vehicleId,
-    vehicleCode,
-    vehicleBrand,
-    vehicleModel,
-    type,
-    severity,
-    title,
-    description,
-    suggestion,
-    ...extras,
-  };
-}
-
-/** Returns label for a checklist field key, or the key itself as fallback */
-function getFieldLabel(key: string): string {
-  for (const cat of INSPECTION_CATEGORIES) {
-    for (const field of cat.fields) {
-      if (field.key === key) return field.label;
-    }
-  }
-  return key;
-}
-
-// ============================================================
-// Alert Computation
-// ============================================================
-
-type VehicleRow = {
+type RawVehicle = {
   id: string;
   vehicle_code: string;
   brand: string | null;
   model: string | null;
 };
 
-type InspectionRow = {
+type RawInspection = {
   id: string;
   vehicle_id: string;
   created_at: string;
@@ -81,167 +46,205 @@ type InspectionRow = {
   remarks_json: Record<string, ChecklistItem>;
 };
 
-type MaintenanceRow = {
+type RawMaintenance = {
   id: string;
   vehicle_id: string;
   created_at: string;
   odometer_km: number;
 };
 
-function computeAlertsForVehicle(
-  vehicle: VehicleRow,
-  inspections: InspectionRow[], // already sorted desc, filtered for this vehicle
-  maintenances: MaintenanceRow[] // already sorted desc, filtered for this vehicle
-): FleetAlert[] {
-  const alerts: FleetAlert[] = [];
-  const { id, vehicle_code, brand, model } = vehicle;
+export type IssueSeverity = "critical" | "warning";
 
-  const latestInspection = inspections[0] ?? null;
-  const latestMaintenance = maintenances[0] ?? null;
+export type VehicleIssue = {
+  severity: IssueSeverity;
+  text: string;
+};
 
-  // ── Inspection overdue ──────────────────────────────────────
-  if (!latestInspection) {
-    alerts.push(
-      makeAlert(id, vehicle_code, brand, model,
-        "NEVER_INSPECTED", "info",
-        "No inspection on record",
-        "This vehicle has never been inspected.",
-        "Schedule an inspection as soon as possible."
-      )
-    );
-  } else {
-    const days = daysSince(latestInspection.created_at);
-    if (days >= INSPECTION_CRITICAL_DAYS) {
-      alerts.push(
-        makeAlert(id, vehicle_code, brand, model,
-          "INSPECTION_CRITICAL", "critical",
-          `Inspection overdue by ${days} days`,
-          `Last inspection was ${days} days ago (${new Date(latestInspection.created_at).toLocaleDateString("en-GB")}).`,
-          "Arrange an immediate inspection — vehicle may be unsafe to operate.",
-          { daysSince: days, lastEventDate: latestInspection.created_at }
-        )
-      );
-    } else if (days >= INSPECTION_WARNING_DAYS) {
-      alerts.push(
-        makeAlert(id, vehicle_code, brand, model,
-          "INSPECTION_OVERDUE", "warning",
-          `Inspection due (${days} days ago)`,
-          `Last inspection was ${days} days ago (${new Date(latestInspection.created_at).toLocaleDateString("en-GB")}).`,
-          "Schedule an inspection within the next few days.",
-          { daysSince: days, lastEventDate: latestInspection.created_at }
-        )
-      );
-    }
+export type VehicleHealth = {
+  vehicleId: string;
+  vehicleCode: string;
+  vehicleBrand: string | null;
+  vehicleModel: string | null;
+  status: "critical" | "warning";
+  issues: VehicleIssue[];
+  lastInspectionDate: string | null;
+  lastMaintenanceDate: string | null;
+  daysSinceInspection: number | null;
+  daysSinceMaintenance: number | null;
+};
 
-    // ── Recent inspection failures ────────────────────────────
-    const recentDays = daysSince(latestInspection.created_at);
-    if (recentDays <= 14 && latestInspection.remarks_json) {
-      const failedItems = Object.entries(latestInspection.remarks_json)
-        .filter(([, item]) => !item.ok)
-        .map(([key]) => getFieldLabel(key));
+// ============================================================
+// Helpers
+// ============================================================
 
-      if (failedItems.length > 0) {
-        alerts.push(
-          makeAlert(id, vehicle_code, brand, model,
-            "RECENT_FAILURE", "warning",
-            `${failedItems.length} issue${failedItems.length > 1 ? "s" : ""} flagged in last inspection`,
-            `Recent inspection (${new Date(latestInspection.created_at).toLocaleDateString("en-GB")}) flagged: ${failedItems.slice(0, 3).join(", ")}${failedItems.length > 3 ? ` +${failedItems.length - 3} more` : ""}.`,
-            "Review the failed items and schedule repairs.",
-            { failedItems, lastEventDate: latestInspection.created_at }
-          )
-        );
-      }
-    }
+function daysBetween(a: string, b: string = new Date().toISOString()): number {
+  return Math.floor((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
+}
 
-    // ── Recurring checklist failures (last N inspections) ─────
-    if (inspections.length >= RECURRING_FAILURE_LOOK_BACK) {
-      const recent = inspections.slice(0, RECURRING_FAILURE_LOOK_BACK);
-      const failureCounts: Record<string, number> = {};
+function fmt(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
 
-      for (const insp of recent) {
-        if (!insp.remarks_json) continue;
-        for (const [key, item] of Object.entries(insp.remarks_json)) {
-          if (!item.ok) {
-            failureCounts[key] = (failureCounts[key] ?? 0) + 1;
-          }
-        }
-      }
-
-      const recurringKeys = Object.entries(failureCounts)
-        .filter(([, count]) => count >= RECURRING_FAILURE_MIN_COUNT)
-        .map(([key]) => key);
-
-      if (recurringKeys.length > 0) {
-        const labels = recurringKeys.map(getFieldLabel);
-        alerts.push(
-          makeAlert(id, vehicle_code, brand, model,
-            "RECURRING_FAILURE", "critical",
-            `Chronic issues across ${RECURRING_FAILURE_LOOK_BACK} inspections`,
-            `The following item${labels.length > 1 ? "s have" : " has"} failed repeatedly: ${labels.join(", ")}.`,
-            "These are persistent problems — prioritise repair before the next trip.",
-            { failedItems: labels, lastEventDate: latestInspection.created_at }
-          )
-        );
-      }
+function getFieldLabel(key: string): string {
+  for (const cat of INSPECTION_CATEGORIES) {
+    for (const field of cat.fields) {
+      if (field.key === key) return field.label.replace(/ \(.*\)/, ""); // strip parenthetical detail
     }
   }
+  // Capitalise the key as a fallback (covers legacy remark keys like "tyre", "alignment")
+  return key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, " ");
+}
 
-  // ── Maintenance overdue ──────────────────────────────────────
-  if (!latestMaintenance) {
-    alerts.push(
-      makeAlert(id, vehicle_code, brand, model,
-        "NEVER_MAINTAINED", "info",
-        "No maintenance on record",
-        "This vehicle has no maintenance history in the system.",
-        "Log past maintenance or schedule a service soon."
-      )
-    );
-  } else {
-    const days = daysSince(latestMaintenance.created_at);
-    if (days >= MAINTENANCE_CRITICAL_DAYS) {
-      alerts.push(
-        makeAlert(id, vehicle_code, brand, model,
-          "MAINTENANCE_CRITICAL", "critical",
-          `No maintenance in ${days} days`,
-          `Last maintenance was ${days} days ago (${new Date(latestMaintenance.created_at).toLocaleDateString("en-GB")}).`,
-          "Service this vehicle immediately — long-term neglect increases breakdown risk.",
-          { daysSince: days, lastEventDate: latestMaintenance.created_at }
-        )
-      );
-    } else if (days >= MAINTENANCE_WARNING_DAYS) {
-      alerts.push(
-        makeAlert(id, vehicle_code, brand, model,
-          "MAINTENANCE_OVERDUE", "warning",
-          `Maintenance due (${days} days since last service)`,
-          `Last maintenance was ${days} days ago (${new Date(latestMaintenance.created_at).toLocaleDateString("en-GB")}).`,
-          "Schedule a service check within the next 2 weeks.",
-          { daysSince: days, lastEventDate: latestMaintenance.created_at }
-        )
-      );
-    }
+/** Average days between successive inspections for a vehicle */
+function avgInspectionInterval(inspections: RawInspection[]): number | null {
+  if (inspections.length < 2) return null;
+  const sorted = [...inspections].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  );
+  let total = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    total += daysBetween(sorted[i - 1].created_at, sorted[i].created_at);
   }
-
-  // ── Odometer gap (inspection km >> maintenance km) ──────────
-  if (latestInspection && latestMaintenance) {
-    const gap = latestInspection.odometer_km - latestMaintenance.odometer_km;
-    if (gap >= ODOMETER_GAP_KM) {
-      alerts.push(
-        makeAlert(id, vehicle_code, brand, model,
-          "ODOMETER_GAP", "warning",
-          `${gap.toLocaleString()} km driven since last service`,
-          `Odometer at last inspection: ${latestInspection.odometer_km.toLocaleString()} km. Last service at: ${latestMaintenance.odometer_km.toLocaleString()} km.`,
-          "Consider scheduling an oil change and mechanical check.",
-          { odometerGap: gap, lastEventDate: latestInspection.created_at }
-        )
-      );
-    }
-  }
-
-  return alerts;
+  return Math.round(total / (sorted.length - 1));
 }
 
 // ============================================================
-// Route Handler
+// Core analysis per vehicle
+// ============================================================
+
+function analyseVehicle(
+  vehicle: RawVehicle,
+  inspections: RawInspection[], // desc-sorted, filtered for this vehicle
+  maintenances: RawMaintenance[] // desc-sorted, filtered for this vehicle
+): VehicleHealth | "ok" | "no_data" {
+  const hasInspections = inspections.length > 0;
+  const hasMaintenances = maintenances.length > 0;
+
+  if (!hasInspections && !hasMaintenances) return "no_data";
+
+  const issues: VehicleIssue[] = [];
+  const latestInspection = inspections[0] ?? null;
+  const latestMaintenance = maintenances[0] ?? null;
+
+  // ── Inspection timing ──────────────────────────────────────
+  if (!hasInspections) {
+    // vehicle has maintenance but no inspection — mildly flag
+    issues.push({ severity: "warning", text: "No inspection on record yet" });
+  } else {
+    const daysSince = daysBetween(latestInspection.created_at);
+    const avgInterval = avgInspectionInterval(inspections);
+
+    if (avgInterval !== null) {
+      // Predictive: flag relative to the vehicle's own pattern
+      const criticalThreshold = Math.round(avgInterval * INSPECTION_OVERDUE_FACTOR * 1.5);
+      const warningThreshold = Math.round(avgInterval * INSPECTION_OVERDUE_FACTOR);
+      if (daysSince >= criticalThreshold) {
+        issues.push({
+          severity: "critical",
+          text: `No inspection in ${daysSince} days — typically every ~${avgInterval} days`,
+        });
+      } else if (daysSince >= warningThreshold) {
+        issues.push({
+          severity: "warning",
+          text: `Due for inspection (${daysSince} days since last, typical interval ~${avgInterval} days)`,
+        });
+      }
+    } else {
+      // Not enough history for pattern — use fixed fallback
+      if (daysSince >= INSPECTION_FALLBACK_CRITICAL_DAYS) {
+        issues.push({ severity: "critical", text: `No inspection in ${daysSince} days` });
+      } else if (daysSince >= INSPECTION_FALLBACK_WARNING_DAYS) {
+        issues.push({ severity: "warning", text: `No inspection in ${daysSince} days` });
+      }
+    }
+
+    // ── Recent inspection failures ─────────────────────────
+    const recentInspectionDays = daysBetween(latestInspection.created_at);
+    if (recentInspectionDays <= 10 && latestInspection.remarks_json) {
+      const failed = Object.entries(latestInspection.remarks_json)
+        .filter(([, item]) => !item.ok)
+        .map(([key]) => ({ key, label: getFieldLabel(key) }));
+
+      if (failed.length > 0) {
+        const hasSafetyCritical = failed.some(({ key }) => SAFETY_CRITICAL_KEYS.has(key));
+        const labels = failed.map(({ label }) => label).join(", ");
+        issues.push({
+          severity: hasSafetyCritical ? "critical" : "warning",
+          text: `Last inspection (${fmt(latestInspection.created_at)}): ${failed.length} issue${failed.length > 1 ? "s" : ""} — ${labels}`,
+        });
+      }
+    }
+
+    // ── Recurring failures (pattern detection) ─────────────
+    if (inspections.length >= RECURRING_LOOK_BACK) {
+      const recent = inspections.slice(0, RECURRING_LOOK_BACK);
+      const counts: Record<string, number> = {};
+      for (const insp of recent) {
+        if (!insp.remarks_json) continue;
+        for (const [key, item] of Object.entries(insp.remarks_json)) {
+          if (!item.ok) counts[key] = (counts[key] ?? 0) + 1;
+        }
+      }
+      const recurring = Object.entries(counts)
+        .filter(([, n]) => n >= RECURRING_COUNT)
+        .map(([key]) => ({ key, label: getFieldLabel(key) }));
+
+      if (recurring.length > 0) {
+        const hasSafetyCritical = recurring.some(({ key }) => SAFETY_CRITICAL_KEYS.has(key));
+        const labels = recurring.map(({ label }) => label).join(", ");
+        issues.push({
+          severity: hasSafetyCritical ? "critical" : "warning",
+          text: `Recurring in last ${RECURRING_LOOK_BACK} inspections: ${labels}`,
+        });
+      }
+    }
+  }
+
+  // ── Maintenance timing ──────────────────────────────────────
+  if (hasInspections) { // only flag missing maintenance if we have inspection data (means vehicle is active)
+    if (!hasMaintenances) {
+      issues.push({ severity: "warning", text: "No service record on record yet" });
+    } else {
+      const daysSince = daysBetween(latestMaintenance.created_at);
+      if (daysSince >= MAINTENANCE_CRITICAL_DAYS) {
+        issues.push({ severity: "critical", text: `No service in ${daysSince} days` });
+      } else if (daysSince >= MAINTENANCE_WARNING_DAYS) {
+        issues.push({ severity: "warning", text: `Last service ${daysSince} days ago (${fmt(latestMaintenance.created_at)})` });
+      }
+    }
+  }
+
+  // ── Odometer gap ────────────────────────────────────────────
+  if (latestInspection && latestMaintenance) {
+    const gap = latestInspection.odometer_km - latestMaintenance.odometer_km;
+    if (gap >= ODOMETER_GAP_KM) {
+      issues.push({
+        severity: "warning",
+        text: `${gap.toLocaleString()} km driven since last service (at ${latestMaintenance.odometer_km.toLocaleString()} km)`,
+      });
+    }
+  }
+
+  if (issues.length === 0) return "ok";
+
+  const status: "critical" | "warning" = issues.some((i) => i.severity === "critical") ? "critical" : "warning";
+
+  return {
+    vehicleId: vehicle.id,
+    vehicleCode: vehicle.vehicle_code,
+    vehicleBrand: vehicle.brand,
+    vehicleModel: vehicle.model,
+    status,
+    issues,
+    lastInspectionDate: latestInspection?.created_at ?? null,
+    lastMaintenanceDate: latestMaintenance?.created_at ?? null,
+    daysSinceInspection: latestInspection ? daysBetween(latestInspection.created_at) : null,
+    daysSinceMaintenance: latestMaintenance ? daysBetween(latestMaintenance.created_at) : null,
+  };
+}
+
+// ============================================================
+// Route
 // ============================================================
 
 export async function GET(req: Request) {
@@ -252,83 +255,68 @@ export async function GET(req: Request) {
 
   try {
     const [vehiclesRes, inspectionsRes, maintenancesRes] = await Promise.all([
-      supabase
-        .from("vehicles")
-        .select("id, vehicle_code, brand, model")
-        .eq("is_active", true)
-        .order("vehicle_code"),
-
-      supabase
-        .from("inspections")
-        .select("id, vehicle_id, created_at, odometer_km, remarks_json")
-        .eq("is_deleted", false)
-        .order("created_at", { ascending: false })
-        .limit(500),
-
-      supabase
-        .from("maintenance")
-        .select("id, vehicle_id, created_at, odometer_km")
-        .eq("is_deleted", false)
-        .order("created_at", { ascending: false })
-        .limit(500),
+      supabase.from("vehicles").select("id, vehicle_code, brand, model").eq("is_active", true).order("vehicle_code"),
+      supabase.from("inspections").select("id, vehicle_id, created_at, odometer_km, remarks_json").eq("is_deleted", false).order("created_at", { ascending: false }).limit(600),
+      supabase.from("maintenance").select("id, vehicle_id, created_at, odometer_km").eq("is_deleted", false).order("created_at", { ascending: false }).limit(600),
     ]);
 
-    if (vehiclesRes.error) {
-      console.error("Alerts: failed to load vehicles:", vehiclesRes.error);
-      return NextResponse.json({ error: "Failed to load vehicles" }, { status: 500 });
-    }
-    if (inspectionsRes.error) {
-      console.error("Alerts: failed to load inspections:", inspectionsRes.error);
-      return NextResponse.json({ error: "Failed to load inspections" }, { status: 500 });
-    }
-    if (maintenancesRes.error) {
-      console.error("Alerts: failed to load maintenance:", maintenancesRes.error);
-      return NextResponse.json({ error: "Failed to load maintenance" }, { status: 500 });
-    }
+    if (vehiclesRes.error) throw vehiclesRes.error;
+    if (inspectionsRes.error) throw inspectionsRes.error;
+    if (maintenancesRes.error) throw maintenancesRes.error;
 
     const vehicles = vehiclesRes.data ?? [];
-    const inspections = (inspectionsRes.data ?? []) as InspectionRow[];
-    const maintenances = (maintenancesRes.data ?? []) as MaintenanceRow[];
+    const inspections = (inspectionsRes.data ?? []) as RawInspection[];
+    const maintenances = (maintenancesRes.data ?? []) as RawMaintenance[];
 
     // Group by vehicle
-    const inspectionsByVehicle: Record<string, InspectionRow[]> = {};
-    for (const insp of inspections) {
-      if (!inspectionsByVehicle[insp.vehicle_id]) inspectionsByVehicle[insp.vehicle_id] = [];
-      inspectionsByVehicle[insp.vehicle_id].push(insp);
+    const inspByVehicle: Record<string, RawInspection[]> = {};
+    for (const i of inspections) {
+      (inspByVehicle[i.vehicle_id] ??= []).push(i);
     }
-
-    const maintenancesByVehicle: Record<string, MaintenanceRow[]> = {};
+    const maintByVehicle: Record<string, RawMaintenance[]> = {};
     for (const m of maintenances) {
-      if (!maintenancesByVehicle[m.vehicle_id]) maintenancesByVehicle[m.vehicle_id] = [];
-      maintenancesByVehicle[m.vehicle_id].push(m);
+      (maintByVehicle[m.vehicle_id] ??= []).push(m);
     }
 
-    const allAlerts: FleetAlert[] = [];
-    for (const vehicle of vehicles) {
-      const vehicleInspections = inspectionsByVehicle[vehicle.id] ?? [];
-      const vehicleMaintenances = maintenancesByVehicle[vehicle.id] ?? [];
-      const alerts = computeAlertsForVehicle(vehicle, vehicleInspections, vehicleMaintenances);
-      allAlerts.push(...alerts);
+    let criticalCount = 0;
+    let warningCount = 0;
+    let okCount = 0;
+    let noDataCount = 0;
+
+    const vehiclesWithIssues: VehicleHealth[] = [];
+
+    for (const v of vehicles) {
+      const result = analyseVehicle(v, inspByVehicle[v.id] ?? [], maintByVehicle[v.id] ?? []);
+      if (result === "no_data") {
+        noDataCount++;
+      } else if (result === "ok") {
+        okCount++;
+      } else {
+        if (result.status === "critical") criticalCount++;
+        else warningCount++;
+        vehiclesWithIssues.push(result);
+      }
     }
 
-    // Sort: critical → warning → info, then by vehicleCode
-    const severityOrder: Record<string, number> = { critical: 0, warning: 1, info: 2 };
-    allAlerts.sort((a, b) => {
-      const sev = severityOrder[a.severity] - severityOrder[b.severity];
-      if (sev !== 0) return sev;
+    // Sort: critical first, then by most issues, then alphabetical
+    vehiclesWithIssues.sort((a, b) => {
+      if (a.status !== b.status) return a.status === "critical" ? -1 : 1;
+      if (b.issues.length !== a.issues.length) return b.issues.length - a.issues.length;
       return a.vehicleCode.localeCompare(b.vehicleCode);
     });
 
-    const criticalCount = allAlerts.filter((a) => a.severity === "critical").length;
-    const warningCount = allAlerts.filter((a) => a.severity === "warning").length;
-    const infoCount = allAlerts.filter((a) => a.severity === "info").length;
-
     return NextResponse.json({
-      alerts: allAlerts,
-      summary: { critical: criticalCount, warning: warningCount, info: infoCount, total: allAlerts.length },
+      summary: {
+        critical: criticalCount,
+        warning: warningCount,
+        ok: okCount,
+        noData: noDataCount,
+        totalActive: vehicles.length,
+      },
+      vehicles: vehiclesWithIssues,
     });
   } catch (err) {
     console.error("Alerts route error:", err);
-    return NextResponse.json({ error: "Failed to compute alerts" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to compute fleet health" }, { status: 500 });
   }
 }

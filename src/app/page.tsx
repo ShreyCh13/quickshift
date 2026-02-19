@@ -71,7 +71,7 @@ export default function Home() {
           </div>
 
           {/* Alert banner */}
-          {alertSummary && alertSummary.total > 0 && (
+          {alertSummary && (alertSummary.critical > 0 || alertSummary.warning > 0) && (
             <button
               onClick={() => router.push("/alerts")}
               className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left shadow-sm transition active:opacity-80 ${
@@ -84,11 +84,11 @@ export default function Home() {
               <div className="flex-1 min-w-0">
                 <p className={`text-sm font-bold ${alertSummary.critical > 0 ? "text-red-700" : "text-amber-700"}`}>
                   {alertSummary.critical > 0
-                    ? `${alertSummary.critical} critical alert${alertSummary.critical > 1 ? "s" : ""} need attention`
-                    : `${alertSummary.warning} vehicle${alertSummary.warning > 1 ? "s" : ""} need attention`}
+                    ? `${alertSummary.critical} vehicle${alertSummary.critical > 1 ? "s" : ""} need immediate attention`
+                    : `${alertSummary.warning} vehicle${alertSummary.warning > 1 ? "s" : ""} due for review`}
                 </p>
                 <p className={`text-xs ${alertSummary.critical > 0 ? "text-red-500" : "text-amber-500"}`}>
-                  {alertSummary.total} total alert{alertSummary.total > 1 ? "s" : ""} · Tap to review
+                  Tap to see fleet health
                 </p>
               </div>
               <svg className={`h-4 w-4 flex-shrink-0 ${alertSummary.critical > 0 ? "text-red-400" : "text-amber-400"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

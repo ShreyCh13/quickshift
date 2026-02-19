@@ -14,7 +14,6 @@ export default function BottomNav() {
   useEffect(() => {
     const session = loadSession();
     setRole(session?.user.role ?? null);
-    // Load alert count for badge
     fetch("/api/alerts", { headers: getSessionHeader() })
       .then((r) => r.json())
       .then((d) => setCriticalCount(d?.summary?.critical ?? 0))
