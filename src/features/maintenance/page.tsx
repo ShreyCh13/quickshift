@@ -372,7 +372,7 @@ export default function MaintenancePage() {
         ) : (
           <div className="space-y-3">
             {maintenance.map((item) => {
-              const canEdit = isAdmin || item.created_by === session?.user.id;
+              const canEdit = isAdmin;
               const isExpanded = expandedId === item.id;
               const isEditing = canEdit && editId === item.id;
 
