@@ -26,7 +26,7 @@ export const userCreateSchema = z
   .object({
     username: z.string().min(1),
     password: z.string().min(1),
-    role: z.enum(["admin", "staff"]),
+    role: z.enum(["admin", "staff", "dev"]),
   })
   .transform((data) => ({ ...data, display_name: data.username }));
 
@@ -35,7 +35,7 @@ export const userUpdateSchema = z
     id: z.string().uuid(),
     username: z.string().min(1).optional(),
     password: z.string().min(1).optional(),
-    role: z.enum(["admin", "staff"]).optional(),
+    role: z.enum(["admin", "staff", "dev"]).optional(),
   })
   .transform((data) => {
     const { username, ...rest } = data;

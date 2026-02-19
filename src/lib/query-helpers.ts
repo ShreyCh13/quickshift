@@ -128,13 +128,17 @@ export async function getVehicleIdsByFilter(
     return { ids: [filters.vehicle_id], noMatch: false };
   }
   
+  // Max vehicle IDs to prevent oversized IN() clauses as fleet grows
+  const MAX_VEHICLE_IDS = 1000;
+
   // Search by vehicle_query (code, plate, brand, model)
   if (filters.vehicle_query) {
     const term = `%${filters.vehicle_query}%`;
     const { data: vehicles, error } = await supabase
       .from("vehicles")
       .select("id")
-      .or(`vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`);
+      .or(`vehicle_code.ilike.${term},plate_number.ilike.${term},brand.ilike.${term},model.ilike.${term}`)
+      .limit(MAX_VEHICLE_IDS);
     
     if (error) {
       console.error("Vehicle query filter error:", error);
@@ -150,7 +154,8 @@ export async function getVehicleIdsByFilter(
     const { data: vehicles, error } = await supabase
       .from("vehicles")
       .select("id")
-      .ilike("brand", filters.brand);
+      .ilike("brand", filters.brand)
+      .limit(MAX_VEHICLE_IDS);
     
     if (error) {
       console.error("Brand filter error:", error);

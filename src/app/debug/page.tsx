@@ -5,10 +5,9 @@ import { getSessionHeader } from "@/lib/auth";
 interface DebugData {
   message: string;
   sessionInfo: {
-    hasSession: boolean;
-    isValid: boolean;
-    userId: string | null;
-    userName: string | null;
+    userId: string;
+    userName: string;
+    role: string;
   };
   counts: {
     vehicles: number;
@@ -37,7 +36,10 @@ export default function DebugPage() {
     const headers = getSessionHeader();
     
     fetch("/api/debug", { headers })
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) return res.json().then((d) => { throw new Error(d?.error || "Forbidden"); });
+        return res.json();
+      })
       .then((d) => {
         setData(d);
         setLoading(false);
@@ -102,15 +104,10 @@ export default function DebugPage() {
           <p className="text-gray-600 mb-6">This page shows what&apos;s in your database.</p>
 
           {/* Session Status */}
-          <div className={`rounded-lg p-4 mb-6 ${data?.sessionInfo?.isValid ? 'bg-green-50 border border-green-200' : 'bg-yellow-50 border border-yellow-200'}`}>
+          <div className="rounded-lg p-4 mb-6 bg-green-50 border border-green-200">
             <h2 className="font-bold mb-2">Session Status</h2>
-            <p>Logged in: <strong>{data?.sessionInfo?.isValid ? 'Yes ✓' : 'No ✗'}</strong></p>
-            {data?.sessionInfo?.userName && <p>User: <strong>{data.sessionInfo.userName}</strong></p>}
-            {!data?.sessionInfo?.isValid && (
-              <p className="text-yellow-700 mt-2 text-sm">
-                ⚠️ You need to be logged in for the app to work. <a href="/login" className="underline">Go to Login</a>
-              </p>
-            )}
+            <p>User: <strong>{data?.sessionInfo?.userName}</strong></p>
+            <p>Role: <strong>{data?.sessionInfo?.role}</strong></p>
           </div>
 
           {/* Counts */}

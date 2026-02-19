@@ -75,6 +75,7 @@ function NewInspectionForm() {
   const [driverName, setDriverName] = useState("");
   const [checklist, setChecklist] = useState<ChecklistState>(() => buildInitialChecklist(FALLBACK_CATEGORIES));
   const [touched, setTouched] = useState<Set<string>>(new Set());
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const s = loadSession();
@@ -147,21 +148,33 @@ function NewInspectionForm() {
       // Non-fatal — driver name still saved on the inspection record
     }
 
-    const res = await createInspection({
-      vehicle_id: vehicleId,
-      odometer_km: Number(odometerKm),
-      driver_name: trimmedDriver,
-      remarks_json: checklist,
-    });
+    try {
+      const res = await createInspection({
+        vehicle_id: vehicleId,
+        odometer_km: Number(odometerKm),
+        driver_name: trimmedDriver,
+        remarks_json: checklist,
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (res.error) {
-      setError(res.error);
-      return;
+      if ("queued" in res && res.queued) {
+        setError(null);
+        setToastMessage("Saved locally. Will sync when you're back online.");
+        setTimeout(() => router.push("/inspections"), 800);
+        return;
+      }
+
+      if ("error" in res && res.error) {
+        setError(res.error);
+        return;
+      }
+
+      router.push("/inspections");
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Failed to save");
     }
-
-    router.push("/inspections");
   }
 
   if (!session) return null;
@@ -173,6 +186,7 @@ function NewInspectionForm() {
     <MobileShell title="New Inspection">
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-4 pb-8">
         <div className="mx-auto max-w-2xl space-y-4">
+          {toastMessage && <Toast message={toastMessage} tone="success" />}
           {error && <Toast message={error} tone="error" />}
 
           {/* Vehicle & Basic Info */}

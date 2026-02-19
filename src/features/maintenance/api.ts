@@ -1,4 +1,5 @@
 import { getSessionHeader } from "@/lib/auth";
+import { fetchWithSession, OFFLINE_QUEUED_ERROR } from "@/lib/api-client";
 import { buildExportUrl, buildQueryParams } from "@/lib/api-utils";
 
 export { buildExportUrl };
@@ -16,28 +17,43 @@ export async function fetchMaintenance(params: {
 }
 
 export async function createMaintenance(payload: Record<string, unknown>) {
-  const res = await fetch("/api/events/maintenance", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getSessionHeader() },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
+  try {
+    return await fetchWithSession<{ maintenance?: unknown; error?: string }>("/api/events/maintenance", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === OFFLINE_QUEUED_ERROR) {
+      return { queued: true } as { queued: true };
+    }
+    throw err;
+  }
 }
 
 export async function updateMaintenance(payload: Record<string, unknown>) {
-  const res = await fetch("/api/events/maintenance", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...getSessionHeader() },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
+  try {
+    return await fetchWithSession<{ maintenance?: unknown; error?: string }>("/api/events/maintenance", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === OFFLINE_QUEUED_ERROR) {
+      return { queued: true } as { queued: true };
+    }
+    throw err;
+  }
 }
 
 export async function deleteMaintenance(id: string) {
-  const res = await fetch("/api/events/maintenance", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json", ...getSessionHeader() },
-    body: JSON.stringify({ id }),
-  });
-  return res.json();
+  try {
+    return await fetchWithSession<{ error?: string }>("/api/events/maintenance", {
+      method: "DELETE",
+      body: JSON.stringify({ id }),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === OFFLINE_QUEUED_ERROR) {
+      return { queued: true } as { queued: true };
+    }
+    throw err;
+  }
 }

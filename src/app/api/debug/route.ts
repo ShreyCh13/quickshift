@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
-import { parseSessionFromRequest, isSessionValid } from "@/lib/auth";
+import { requireSession, requireRole } from "@/lib/auth";
 
 export async function GET(req: Request) {
-  // Check session but don't block - we want to see the debug info either way
-  const session = parseSessionFromRequest(req);
-  const sessionValid = isSessionValid(session);
+  const session = requireSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireRole(session, ["dev"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   
   const supabase = getSupabaseAdmin();
   
@@ -61,10 +63,9 @@ export async function GET(req: Request) {
   return NextResponse.json({
     message: "Database Debug Info",
     sessionInfo: {
-      hasSession: !!session,
-      isValid: sessionValid,
-      userId: session?.user?.id || null,
-      userName: session?.user?.displayName || null,
+      userId: session.user.id,
+      userName: session.user.displayName,
+      role: session.user.role,
     },
     counts: {
       vehicles: vehicles.count || 0,

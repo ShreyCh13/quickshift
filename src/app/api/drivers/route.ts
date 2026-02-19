@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   if (activeOnly) query = query.eq("is_active", true);
   if (search.trim()) query = query.ilike("name", `%${search.trim()}%`);
 
-  const { data, error, count } = await query.limit(100);
+  const { data, error, count } = await query.limit(500);
 
   if (error) {
     console.error("Drivers GET error:", error);

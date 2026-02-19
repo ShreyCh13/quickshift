@@ -107,7 +107,7 @@ export type UserPublic = {
   id: string;
   username: string;
   display_name: string;
-  role: "admin" | "staff";
+  role: "admin" | "staff" | "dev";
   created_at: string;
   updated_at?: string;
 };
@@ -203,17 +203,15 @@ export type AnalyticsResponse = {
 };
 
 /**
- * Login response
+ * Login response (session stored client-side; no token/expiresAt returned)
  */
 export type LoginResponse = {
   user: {
     id: string;
     username: string;
     displayName: string;
-    role: "admin" | "staff";
+    role: "admin" | "staff" | "dev";
   };
-  token: string;
-  expiresAt: string;
 };
 
 // ============================================================================

@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
+import { requireRole, requireSession } from "@/lib/auth";
 import { DEFAULT_REMARK_FIELDS, DEFAULT_USERS, DEFAULT_VEHICLES } from "@/lib/constants";
 
 let seeded = false;
 
-export async function POST() {
+export async function POST(req: Request) {
+  const session = requireSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!requireRole(session, ["admin", "dev"])) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const supabase = getSupabaseAdmin();
 
   try {

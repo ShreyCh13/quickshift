@@ -23,7 +23,7 @@ A production-ready, mobile-first fleet vehicle inspection and maintenance tracki
 ## Tech Stack
 
 ### Frontend
-- **Framework**: Next.js 14 (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **UI**: React 19, TypeScript, Tailwind CSS 4
 - **State Management**: TanStack React Query (server state), localStorage (session)
 - **Data Fetching**: Custom hooks with retry logic, caching, and offline support
@@ -137,6 +137,7 @@ state-fleet/
 │   ├── migration_v2.sql              # Suppliers, drivers, supplier_invoice_number
 │   ├── migration_v3.sql              # maintenance_vehicle_summary view, RLS for Sheets sync
 │   ├── migration_v4.sql              # checklist_items table
+│   ├── migration_v5.sql              # dev role + dev user
 │   └── seed.sql                      # Sample data
 ├── data/                             # Sample data files
 │   └── vehicles.csv                  # Vehicle import template
@@ -174,7 +175,7 @@ cp env.example .env.local
 
 # 4. Set up database (in Supabase SQL Editor)
 #   a. Fresh install: Run supabase/schema.sql (includes suppliers, drivers)
-#   b. Existing DB: Run migration_improvements.sql, then migration_v2.sql, migration_v3.sql, migration_v4.sql
+#   b. Existing DB: Run migration_improvements.sql, migration_v2.sql, migration_v3.sql, migration_v4.sql, migration_v5.sql
 #   c. (optional) Run supabase/seed.sql for sample data
 
 # 5. Start development server

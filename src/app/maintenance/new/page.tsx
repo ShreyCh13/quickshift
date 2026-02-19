@@ -38,6 +38,7 @@ function NewMaintenanceForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     vehicle_id: vehicleParam || "",
     odometer_km: "",
@@ -75,24 +76,36 @@ function NewMaintenanceForm() {
     setLoading(true);
     setError(null);
 
-    const res = await createMaintenance({
-      vehicle_id,
-      odometer_km: Number(odometer_km),
-      bill_number: bill_number.trim(),
-      supplier_name: supplier_name.trim(),
-      supplier_invoice_number: supplier_invoice_number.trim(),
-      amount: Number(amount),
-      remarks: remarks.trim(),
-    });
+    try {
+      const res = await createMaintenance({
+        vehicle_id,
+        odometer_km: Number(odometer_km),
+        bill_number: bill_number.trim(),
+        supplier_name: supplier_name.trim(),
+        supplier_invoice_number: supplier_invoice_number.trim(),
+        amount: Number(amount),
+        remarks: remarks.trim(),
+      });
 
-    setLoading(false);
+      setLoading(false);
 
-    if (res.error) {
-      setError(res.error);
-      return;
+      if ("queued" in res && res.queued) {
+        setError(null);
+        setToastMessage("Saved locally. Will sync when you're back online.");
+        setTimeout(() => router.push("/maintenance"), 800);
+        return;
+      }
+
+      if ("error" in res && res.error) {
+        setError(res.error);
+        return;
+      }
+
+      router.push("/maintenance");
+    } catch (err) {
+      setLoading(false);
+      setError(err instanceof Error ? err.message : "Failed to save");
     }
-
-    router.push("/maintenance");
   }
 
   if (!session) return null;
@@ -101,6 +114,7 @@ function NewMaintenanceForm() {
     <MobileShell title="New Maintenance">
       <div className="min-h-screen bg-gradient-to-b from-emerald-50 to-white p-4 pb-8">
         <div className="mx-auto max-w-2xl space-y-4">
+          {toastMessage && <Toast message={toastMessage} tone="success" />}
           {error && <Toast message={error} tone="error" />}
 
           <div className="rounded-xl bg-white p-5 shadow-sm">

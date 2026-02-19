@@ -6,7 +6,7 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import { getSessionHeader } from "@/lib/auth";
+import { fetchWithSession } from "@/lib/api-client";
 import type { AnalyticsResponse } from "@/lib/api-types";
 import type { ChecklistItem } from "@/lib/types";
 
@@ -97,24 +97,7 @@ export const queryKeys = {
 // ============================================
 // API Helpers
 // ============================================
-
-async function fetchWithSession<T>(url: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...getSessionHeader(),
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error || `HTTP ${response.status}`);
-  }
-
-  return response.json();
-}
+// fetchWithSession is imported from @/lib/api-client (includes offline queue support)
 
 function encodeFilters(filters: object): string {
   return btoa(JSON.stringify(filters));

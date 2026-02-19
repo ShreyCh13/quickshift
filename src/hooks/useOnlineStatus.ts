@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { processRetryQueue, getRetryQueueCount } from "@/lib/offline";
 
 interface UseOnlineStatusReturn {
@@ -16,6 +17,8 @@ export function useOnlineStatus(): UseOnlineStatusReturn {
   const [isOnline, setIsOnline] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
 
+  const queryClient = useQueryClient();
+
   useEffect(() => {
     // Set initial state
     if (typeof window !== "undefined") {
@@ -24,27 +27,35 @@ export function useOnlineStatus(): UseOnlineStatusReturn {
 
     const handleOnline = () => {
       setIsOnline(true);
-      // Auto-sync when back online
-      processRetryQueue().then(() => {
-        getRetryQueueCount().then(setPendingCount);
-      });
+      // Auto-sync when back online, then refresh cached data
+      processRetryQueue().then(({ success }) => {
+        if (success > 0) {
+          queryClient.invalidateQueries();
+        }
+        return getRetryQueueCount();
+      }).then(setPendingCount);
     };
 
     const handleOffline = () => {
       setIsOnline(false);
     };
 
+    const refreshPendingCount = () => {
+      getRetryQueueCount().then(setPendingCount);
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("offline-queue-updated", refreshPendingCount);
 
-    // Check pending count on mount
     getRetryQueueCount().then(setPendingCount);
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("offline-queue-updated", refreshPendingCount);
     };
-  }, []);
+  }, [queryClient]);
 
   const syncPending = useCallback(async () => {
     const result = await processRetryQueue();

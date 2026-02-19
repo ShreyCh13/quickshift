@@ -209,7 +209,12 @@ export async function addToRetryQueue(
 
       const request = store.add(entry);
       request.onerror = () => reject(request.error);
-      request.onsuccess = () => resolve(entry.id);
+      request.onsuccess = () => {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("offline-queue-updated"));
+        }
+        resolve(entry.id);
+      };
     });
   } catch (error) {
     console.error("Failed to add to retry queue:", error);
@@ -336,16 +341,6 @@ export async function processRetryQueue(): Promise<{ success: number; failed: nu
  */
 export function isOnline(): boolean {
   if (typeof window === "undefined") return true;
-  return navigator.onLine;
-}
-
-/**
- * Hook to track online/offline status.
- */
-export function useOnlineStatus(): boolean {
-  if (typeof window === "undefined") return true;
-
-  // This is a simple implementation - in React components, you'd use useState/useEffect
   return navigator.onLine;
 }
 

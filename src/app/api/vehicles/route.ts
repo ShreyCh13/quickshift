@@ -3,7 +3,8 @@ import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
 import { vehicleSchema } from "@/lib/validation";
 import { PAGE_SIZE_DEFAULT } from "@/lib/constants";
-import { invalidateCache } from "@/lib/cache";
+import { getOrSetCache, invalidateCache } from "@/lib/cache";
+import { CACHE_TTL_VEHICLES } from "@/lib/constants";
 
 export async function GET(req: Request) {
   try {
@@ -51,18 +52,25 @@ export async function GET(req: Request) {
       return query.order("updated_at", { ascending: false }).range(from, to);
     }
 
-    let { data, error, count } = await runQuery(true);
-    if (error && error.message?.includes("column vehicles.plate_number")) {
-      const fallback = await runQuery(false);
-      data = fallback.data;
-      error = fallback.error;
-      count = fallback.count;
-    }
-    if (error) {
-      console.error("Failed to load vehicles:", error);
-      return NextResponse.json({ error: "Failed to load vehicles", details: error.message }, { status: 500 });
-    }
-    return NextResponse.json({ vehicles: data, total: count || 0 });
+    const cacheKey = `vehicles:${search ?? ""}:${isActive ?? ""}:${page}:${pageSize}`;
+
+    const result = await getOrSetCache(
+      cacheKey,
+      CACHE_TTL_VEHICLES,
+      async () => {
+        let { data, error, count } = await runQuery(true);
+        if (error && error.message?.includes("column vehicles.plate_number")) {
+          const fallback = await runQuery(false);
+          data = fallback.data;
+          error = fallback.error;
+          count = fallback.count;
+        }
+        if (error) throw new Error(error.message);
+        return { vehicles: data, total: count || 0 };
+      }
+    );
+
+    return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unexpected error";
     console.error("Failed to load vehicles:", err);

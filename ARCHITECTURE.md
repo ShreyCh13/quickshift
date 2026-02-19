@@ -80,7 +80,7 @@ React Query Auto-Refetch
 ### 3. Security
 - **Rate limiting**: Login (5/15min), Import (5/5min), Export (10/5min)
 - **Password hashing**: PBKDF2 with 100k iterations
-- **Session TTL**: 24 hours
+- **Session TTL**: 30 days
 - **Role-based access**: Admin vs Staff permissions
 - **Input validation**: Zod schemas on all inputs
 
@@ -337,7 +337,7 @@ if (isLoading) {
 
 ## Production Checklist
 
-- [ ] Run migrations in order: `migration_improvements.sql`, `migration_v2.sql`, `migration_v3.sql`, `migration_v4.sql`
+- [ ] Run migrations in order: `migration_improvements.sql`, `migration_v2.sql`, `migration_v3.sql`, `migration_v4.sql`, `migration_v5.sql`
 - [ ] Change default user passwords
 - [ ] Set all environment variables in Vercel
 - [ ] Test S3 backup webhook
