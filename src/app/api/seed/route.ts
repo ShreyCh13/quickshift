@@ -5,14 +5,22 @@ import { DEFAULT_REMARK_FIELDS, DEFAULT_USERS, DEFAULT_VEHICLES } from "@/lib/co
 let seeded = false;
 
 export async function POST() {
-  if (seeded) {
-    return NextResponse.json({ seeded: true, cached: true });
-  }
-
   const supabase = getSupabaseAdmin();
 
   try {
-    // Seed users if empty
+    // Always force-reset default users to their default credentials
+    await supabase
+      .from("users")
+      .upsert(
+        DEFAULT_USERS.map((u) => ({ ...u, password_changed_at: null, updated_at: new Date().toISOString() })),
+        { onConflict: "username" }
+      );
+
+    if (seeded) {
+      return NextResponse.json({ seeded: true, cached: true });
+    }
+
+    // Seed users if empty (fallback for first run)
     const { count: userCount } = await supabase.from("users").select("*", { count: "exact", head: true });
     if (!userCount || userCount === 0) {
       await supabase.from("users").insert(DEFAULT_USERS);
