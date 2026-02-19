@@ -6,22 +6,41 @@ import MobileShell from "@/components/MobileShell";
 import Autocomplete from "@/components/Autocomplete";
 import Toast from "@/components/Toast";
 import { loadSession, getSessionHeader } from "@/lib/auth";
-import type { Session, VehicleRow, ChecklistItem } from "@/lib/types";
+import type { Session, VehicleRow, ChecklistItem, ChecklistItemRow } from "@/lib/types";
 import { fetchVehicles } from "@/features/vehicles/api";
 import { createInspection } from "@/features/inspections/api";
 import { INSPECTION_CATEGORIES } from "@/lib/constants";
 
 type ChecklistState = Record<string, ChecklistItem>;
+type DynamicCategory = { key: string; label: string; fields: { key: string; label: string }[] };
 
-function buildInitialChecklist(): ChecklistState {
+function buildCategories(dbItems: ChecklistItemRow[]): DynamicCategory[] {
+  const map = new Map<string, DynamicCategory>();
+  for (const item of dbItems) {
+    if (!map.has(item.category_key)) {
+      map.set(item.category_key, { key: item.category_key, label: item.category_label, fields: [] });
+    }
+    map.get(item.category_key)!.fields.push({ key: item.item_key, label: item.item_label });
+  }
+  return Array.from(map.values());
+}
+
+function buildInitialChecklist(categories: DynamicCategory[]): ChecklistState {
   const state: ChecklistState = {};
-  for (const cat of INSPECTION_CATEGORIES) {
+  for (const cat of categories) {
     for (const field of cat.fields) {
       state[field.key] = { ok: false, remarks: "" };
     }
   }
   return state;
 }
+
+/** Fallback static categories when DB is unavailable */
+const FALLBACK_CATEGORIES: DynamicCategory[] = INSPECTION_CATEGORIES.map((c) => ({
+  key: c.key,
+  label: c.label,
+  fields: c.fields.map((f) => ({ key: f.key, label: f.label })),
+}));
 
 function fetchDriverSuggestions(search: string): Promise<string[]> {
   const params = new URLSearchParams({ active: "true" });
@@ -49,11 +68,12 @@ function NewInspectionForm() {
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [categories, setCategories] = useState<DynamicCategory[]>(FALLBACK_CATEGORIES);
 
   const [vehicleId, setVehicleId] = useState(vehicleParam || "");
   const [odometerKm, setOdometerKm] = useState("");
   const [driverName, setDriverName] = useState("");
-  const [checklist, setChecklist] = useState<ChecklistState>(buildInitialChecklist);
+  const [checklist, setChecklist] = useState<ChecklistState>(() => buildInitialChecklist(FALLBACK_CATEGORIES));
   const [touched, setTouched] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -64,6 +84,20 @@ function NewInspectionForm() {
     }
     setSession(s);
     fetchVehicles({ page: 1, pageSize: 200 }).then((res) => setVehicles(res.vehicles || []));
+
+    // Fetch DB checklist items; fall back to constants if unavailable
+    fetch("/api/config/checklist?activeOnly=1", { headers: getSessionHeader() })
+      .then((r) => r.json())
+      .then((d: { checklistItems?: ChecklistItemRow[] }) => {
+        if (d.checklistItems && d.checklistItems.length > 0) {
+          const cats = buildCategories(d.checklistItems);
+          setCategories(cats);
+          setChecklist(buildInitialChecklist(cats));
+        }
+      })
+      .catch(() => {
+        // Keep fallback categories already set
+      });
   }, [router]);
 
   function setItem(key: string, patch: Partial<ChecklistItem>) {
@@ -78,7 +112,7 @@ function NewInspectionForm() {
     }
 
     // Validate: failed items must have remarks
-    const missingRemarks = INSPECTION_CATEGORIES.flatMap((cat) =>
+    const missingRemarks = categories.flatMap((cat) =>
       cat.fields.filter((f) => {
         const item = checklist[f.key];
         return !item.ok && !item.remarks.trim();
@@ -113,7 +147,7 @@ function NewInspectionForm() {
   if (!session) return null;
 
   const passCount = Object.values(checklist).filter((i) => i.ok).length;
-  const totalCount = Object.values(checklist).length;
+  const totalCount = categories.flatMap((c) => c.fields).length;
 
   return (
     <MobileShell title="New Inspection">
@@ -191,7 +225,7 @@ function NewInspectionForm() {
           </div>
 
           {/* Checklist by category */}
-          {INSPECTION_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <div key={cat.key} className="overflow-hidden rounded-xl bg-white shadow-sm">
               <div className="bg-blue-600 px-5 py-3">
                 <h3 className="text-sm font-bold uppercase tracking-wide text-white">{cat.label}</h3>

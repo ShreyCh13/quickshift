@@ -952,6 +952,144 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
+
+            {/* ========== CHECKLIST TAB ========== */}
+            {activeTab === "checklist" && (
+              <div className="space-y-4">
+                {/* Add new item */}
+                <div className="rounded-xl bg-white p-4 shadow">
+                  <h2 className="mb-1 text-lg font-bold text-slate-900">Inspection Checklist</h2>
+                  <p className="mb-4 text-sm text-slate-500">Manage the vehicle inspection checklist items. Run <code className="rounded bg-slate-100 px-1 font-mono text-xs">migration_v4.sql</code> first.</p>
+
+                  <div className="mb-4 space-y-2 rounded-xl border-2 border-blue-100 bg-blue-50 p-3">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-blue-700">Add New Item</div>
+                    <select
+                      className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                      value={newChecklistItem.category_key}
+                      onChange={(e) => {
+                        const cat = INSPECTION_CATEGORIES.find((c) => c.key === e.target.value);
+                        setNewChecklistItem((prev) => ({
+                          ...prev,
+                          category_key: e.target.value,
+                          category_label: cat?.label ?? e.target.value,
+                        }));
+                      }}
+                    >
+                      {INSPECTION_CATEGORIES.map((c) => (
+                        <option key={c.key} value={c.key}>{c.label}</option>
+                      ))}
+                      <option value="other">Other</option>
+                    </select>
+                    <input
+                      className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-blue-500 focus:outline-none"
+                      placeholder="Item label (e.g. AC Compressor)"
+                      value={newChecklistItem.item_label}
+                      onChange={(e) => setNewChecklistItem((prev) => ({ ...prev, item_label: e.target.value }))}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCreateChecklistItem(); }}
+                    />
+                    <input
+                      className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm font-mono focus:border-blue-500 focus:outline-none"
+                      placeholder="Item key (e.g. ac_compressor) — auto-generated if blank"
+                      value={newChecklistItem.item_key}
+                      onChange={(e) => setNewChecklistItem((prev) => ({ ...prev, item_key: e.target.value }))}
+                    />
+                    <button
+                      onClick={handleCreateChecklistItem}
+                      disabled={createChecklistItemMutation.isPending}
+                      className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white active:bg-blue-700 disabled:opacity-50"
+                    >
+                      {createChecklistItemMutation.isPending ? "Adding..." : "+ Add Item"}
+                    </button>
+                  </div>
+
+                  {checklistLoading ? (
+                    <div className="py-4 text-center text-sm text-slate-400">Loading...</div>
+                  ) : localChecklistItems.length === 0 ? (
+                    <div className="rounded-lg bg-amber-50 p-4 text-center text-sm text-amber-700">
+                      No items found. Run <code className="font-mono">migration_v4.sql</code> to seed the default checklist.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {(() => {
+                        const categoryMap = new Map<string, { label: string; items: ChecklistItemRow[] }>();
+                        for (const item of localChecklistItems) {
+                          if (!categoryMap.has(item.category_key)) {
+                            categoryMap.set(item.category_key, { label: item.category_label, items: [] });
+                          }
+                          categoryMap.get(item.category_key)!.items.push(item);
+                        }
+                        return Array.from(categoryMap.entries()).map(([catKey, { label, items }]) => (
+                          <div key={catKey} className="overflow-hidden rounded-xl border border-slate-200">
+                            <div className="bg-blue-600 px-4 py-2">
+                              <span className="text-sm font-bold uppercase tracking-wide text-white">{label}</span>
+                              <span className="ml-2 text-xs text-blue-200">{items.filter((i) => i.is_active).length}/{items.length} active</span>
+                            </div>
+                            <div className="divide-y divide-slate-100">
+                              {items.map((item) => (
+                                <div key={item.id} className={`px-3 py-2.5 ${!item.is_active ? "bg-slate-50 opacity-60" : ""}`}>
+                                  {editChecklistId === item.id ? (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        className="flex-1 rounded-lg border-2 border-blue-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:outline-none"
+                                        value={editChecklistLabel}
+                                        onChange={(e) => setEditChecklistLabel(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === "Enter") handleSaveChecklistLabel(item); if (e.key === "Escape") setEditChecklistId(null); }}
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => handleSaveChecklistLabel(item)}
+                                        disabled={updateChecklistItemMutation.isPending}
+                                        className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white active:bg-blue-700 disabled:opacity-50"
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        onClick={() => setEditChecklistId(null)}
+                                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 active:bg-slate-50"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <div className="truncate text-sm font-medium text-slate-900">{item.item_label}</div>
+                                        <div className="font-mono text-xs text-slate-400">{item.item_key}</div>
+                                      </div>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                          onClick={() => handleToggleChecklistItem(item)}
+                                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${item.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"}`}
+                                        >
+                                          {item.is_active ? "Active" : "Off"}
+                                        </button>
+                                        <button
+                                          onClick={() => { setEditChecklistId(item.id); setEditChecklistLabel(item.item_label); }}
+                                          className="rounded p-1.5 text-slate-400 active:bg-slate-50"
+                                        >
+                                          ✏️
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteChecklistItem(item.id)}
+                                          disabled={deleteChecklistItemMutation.isPending}
+                                          className="rounded p-1.5 text-red-400 active:bg-red-50 disabled:opacity-50"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
