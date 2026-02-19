@@ -141,15 +141,23 @@ export const paginationSchema = z.object({
 });
 
 export const inspectionsFilterSchema = z.object({
+  // Legacy single-value filters
   vehicle_id: z.string().uuid().optional(),
   vehicle_query: z.string().optional(),
   brand: z.string().optional(),
+  driver_name: z.string().optional(),
+  remarks: z.record(z.string(), z.string().min(1)).optional(),
+  // Multi-select filters
+  vehicle_ids: z.array(z.string().uuid()).optional(),
+  driver_names: z.array(z.string()).optional(),
+  filter_mode: z.enum(["and", "or"]).optional(),
+  // Universal search
+  search: z.string().optional(),
+  // Date / range
   date_from: z.string().optional(),
   date_to: z.string().optional(),
   odometer_min: z.number().int().optional(),
   odometer_max: z.number().int().optional(),
-  driver_name: z.string().optional(),
-  remarks: z.record(z.string(), z.string().min(1)).optional(),
 });
 
 export const maintenanceFilterSchema = z.object({
@@ -175,12 +183,17 @@ export const maintenanceFilterSchema = z.object({
 });
 
 export const analyticsFilterSchema = z.object({
+  // Legacy single-value filters
   vehicle_id: z.string().uuid().optional(),
   brand: z.string().optional(),
+  supplier: z.string().optional(),
+  // Multi-select filters
+  vehicle_ids: z.array(z.string().uuid()).optional(),
+  supplier_names: z.array(z.string()).optional(),
+  // Other filters
+  type: z.enum(["all", "inspections", "maintenance"]).optional(),
   date_from: z.string().optional(),
   date_to: z.string().optional(),
-  supplier: z.string().optional(),
-  type: z.enum(["all", "inspections", "maintenance"]).optional(),
 });
 
 export const vehicleFilterSchema = z.object({

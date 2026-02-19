@@ -111,21 +111,34 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const filters = parseFilters(url.searchParams.get("filters"), analyticsFilterSchema);
 
-  const { brand, vehicle_id: vehicleId, date_from: dateFrom, date_to: dateTo, supplier, type = "all" } = filters;
+  const {
+    brand,
+    vehicle_id: vehicleId,
+    vehicle_ids: vehicleIds,
+    date_from: dateFrom,
+    date_to: dateTo,
+    supplier,
+    supplier_names: supplierNames,
+    type = "all",
+  } = filters;
 
   try {
-    // Build vehicle query
+    // Build vehicle query — multi-select takes priority over single
     let vehiclesQuery = supabase.from("vehicles").select("id, vehicle_code, plate_number, brand, model");
-    if (brand) vehiclesQuery = vehiclesQuery.ilike("brand", brand);
-    if (vehicleId) vehiclesQuery = vehiclesQuery.eq("id", vehicleId);
-    
+    if (vehicleIds && vehicleIds.length > 0) {
+      vehiclesQuery = vehiclesQuery.in("id", vehicleIds);
+    } else {
+      if (brand) vehiclesQuery = vehiclesQuery.ilike("brand", brand);
+      if (vehicleId) vehiclesQuery = vehiclesQuery.eq("id", vehicleId);
+    }
+
     const { data: vehicles, error: vehiclesError } = await vehiclesQuery;
     if (vehiclesError) {
       console.error("Failed to load vehicles:", vehiclesError);
       return NextResponse.json({ error: "Failed to load vehicles" }, { status: 500 });
     }
 
-    const vehicleIds = (vehicles || []).map((v) => v.id);
+    const resolvedVehicleIds = (vehicles || []).map((v) => v.id);
 
     // Build maintenance query
     let maintenanceQuery = supabase
@@ -140,17 +153,20 @@ export async function GET(req: Request) {
       .eq("is_deleted", false);
 
     // Apply vehicle filters
-    if (vehicleIds.length > 0 && (brand || vehicleId)) {
-      maintenanceQuery = maintenanceQuery.in("vehicle_id", vehicleIds);
-      inspectionsQuery = inspectionsQuery.in("vehicle_id", vehicleIds);
+    const hasVehicleFilter = (vehicleIds && vehicleIds.length > 0) || brand || vehicleId;
+    if (resolvedVehicleIds.length > 0 && hasVehicleFilter) {
+      maintenanceQuery = maintenanceQuery.in("vehicle_id", resolvedVehicleIds);
+      inspectionsQuery = inspectionsQuery.in("vehicle_id", resolvedVehicleIds);
     }
 
     // Apply date filters using shared helper
     maintenanceQuery = applyDateFilters(maintenanceQuery, { date_from: dateFrom, date_to: dateTo });
     inspectionsQuery = applyDateFilters(inspectionsQuery, { date_from: dateFrom, date_to: dateTo });
 
-    // Apply supplier filter
-    if (supplier) {
+    // Apply supplier filter — multi-select takes priority
+    if (supplierNames && supplierNames.length > 0) {
+      maintenanceQuery = maintenanceQuery.in("supplier_name", supplierNames);
+    } else if (supplier) {
       maintenanceQuery = maintenanceQuery.ilike("supplier_name", `%${supplier}%`);
     }
 
@@ -182,7 +198,7 @@ export async function GET(req: Request) {
     // Aggregate data using helper functions
     const monthly = aggregateMonthlyTotals(maintenance);
     const topSuppliers = aggregateSupplierStats(maintenance);
-    const topVehicles = aggregateVehicleStats(vehicles || [], maintenance, inspections);
+    const topVehicles = aggregateVehicleStats(vehicles || [], maintenance as Array<{ vehicle_id: string; amount: number }>, inspections as Array<{ vehicle_id: string }>);
 
     return NextResponse.json({
       filters,

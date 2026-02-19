@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import MobileShell from "@/components/MobileShell";
@@ -10,140 +10,7 @@ import type { Session } from "@/lib/types";
 import { buildExportUrl, updateMaintenance } from "./api";
 import Skeleton from "@/components/Skeleton";
 import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, useSuppliers, queryKeys } from "@/hooks/useQueries";
-
-// ── Multi-select dropdown ──────────────────────────────────────────────────
-function MultiSelectDropdown({
-  options,
-  selected,
-  onChange,
-  placeholder,
-}: {
-  options: { value: string; label: string }[];
-  selected: string[];
-  onChange: (vals: string[]) => void;
-  placeholder: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function handleOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [open]);
-
-  const filtered = search.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
-    : options;
-
-  function toggle(value: string) {
-    onChange(selected.includes(value) ? selected.filter((v) => v !== value) : [...selected, value]);
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between rounded-lg border-2 border-slate-200 px-3 py-3 text-base text-left focus:border-emerald-500 focus:outline-none"
-      >
-        <span className={selected.length === 0 ? "text-slate-400" : "font-medium text-slate-900"}>
-          {selected.length === 0 ? placeholder : `${selected.length} selected`}
-        </span>
-        <span className="text-slate-400 text-xs">{open ? "▲" : "▼"}</span>
-      </button>
-
-      {selected.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {selected.map((val) => {
-            const opt = options.find((o) => o.value === val);
-            return (
-              <span
-                key={val}
-                className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
-              >
-                {opt?.label ?? val}
-                <button
-                  type="button"
-                  onClick={() => toggle(val)}
-                  className="text-emerald-600 hover:text-emerald-900 leading-none"
-                >
-                  ×
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border-2 border-slate-200 bg-white shadow-2xl">
-            <div className="border-b border-slate-100 p-2">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search…"
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-emerald-400 focus:outline-none"
-                autoFocus
-              />
-            </div>
-            <div className="max-h-52 overflow-y-auto">
-              {filtered.length === 0 ? (
-                <div className="px-3 py-4 text-center text-sm text-slate-400">No options</div>
-              ) : (
-                filtered.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => toggle(option.value)}
-                    className="flex w-full items-center gap-3 px-3 py-2.5 text-sm active:bg-slate-50"
-                  >
-                    <div
-                      className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 ${
-                        selected.includes(option.value)
-                          ? "border-emerald-500 bg-emerald-500"
-                          : "border-slate-300"
-                      }`}
-                    >
-                      {selected.includes(option.value) && (
-                        <span className="text-[10px] font-bold text-white">✓</span>
-                      )}
-                    </div>
-                    <span className="flex-1 text-left text-slate-800">{option.label}</span>
-                  </button>
-                ))
-              )}
-            </div>
-            <div className="flex gap-2 border-t border-slate-100 p-2">
-              <button
-                type="button"
-                onClick={() => { onChange([]); setSearch(""); }}
-                className="flex-1 rounded-lg border border-slate-200 py-2 text-xs font-medium text-slate-600 active:bg-slate-50"
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                onClick={() => { setOpen(false); setSearch(""); }}
-                className="flex-1 rounded-lg bg-emerald-600 py-2 text-xs font-medium text-white active:bg-emerald-700"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-// ───────────────────────────────────────────────────────────────────────────
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
 interface MaintenanceItem {
   id: string;

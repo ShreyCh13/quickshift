@@ -4,31 +4,49 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import MobileShell from "@/components/MobileShell";
 import { getSessionHeader, loadSession } from "@/lib/auth";
-import type { Session, VehicleRow } from "@/lib/types";
+import type { Session } from "@/lib/types";
 import { buildExportUrl } from "./api";
-import { useVehicles, useAnalytics } from "@/hooks/useQueries";
+import { useVehicleDropdown, useSuppliers, useAnalytics } from "@/hooks/useQueries";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import * as XLSX from "xlsx";
 
 export default function AnalyticsPage() {
   const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
 
-  // Filters - stored in state so we can build the query
-  const [vehicleFilter, setVehicleFilter] = useState("");
+  // Draft filters
+  const [draftVehicleIds, setDraftVehicleIds] = useState<string[]>([]);
+  const [draftSupplierNames, setDraftSupplierNames] = useState<string[]>([]);
   const [brandFilter, setBrandFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<"all" | "inspections" | "maintenance">("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [supplierFilter, setSupplierFilter] = useState("");
-  
+
   // Applied filters - only update when user clicks Apply
   const [appliedFilters, setAppliedFilters] = useState<Record<string, unknown>>({});
 
-  // React Query hooks - data is cached automatically
-  const { data: vehiclesData, isLoading: vehiclesLoading } = useVehicles(undefined, 1, 200);
-  const vehicles: VehicleRow[] = (vehiclesData as any)?.vehicles || [];
-  
-  // Analytics data with applied filters
+  const { data: vehiclesData, isLoading: vehiclesLoading } = useVehicleDropdown();
+  const vehicles = vehiclesData ?? [];
+  const { data: suppliers = [] } = useSuppliers();
+
+  const vehicleOptions = useMemo(
+    () => vehicles.map((v) => ({
+      value: v.id,
+      label: `${v.vehicle_code}${v.brand ? ` · ${v.brand}` : ""}${v.model ? ` ${v.model}` : ""}`,
+    })),
+    [vehicles]
+  );
+
+  const supplierOptions = useMemo(
+    () => suppliers.map((s) => ({ value: s.name, label: s.name })),
+    [suppliers]
+  );
+
+  const uniqueBrands = useMemo(
+    () => Array.from(new Set(vehicles.map((v) => v.brand).filter(Boolean))) as string[],
+    [vehicles]
+  );
+
   const { data: analyticsData, isLoading: analyticsLoading } = useAnalytics(appliedFilters);
   const data = analyticsData;
 
@@ -43,30 +61,28 @@ export default function AnalyticsPage() {
     setSession(s);
   }, [router]);
 
-  // Apply filters - triggers analytics refetch
   function applyFilters() {
     const filters: Record<string, unknown> = {};
     if (brandFilter) filters.brand = brandFilter;
-    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (draftVehicleIds.length) filters.vehicle_ids = draftVehicleIds;
+    if (draftSupplierNames.length) filters.supplier_names = draftSupplierNames;
     if (typeFilter !== "all") filters.type = typeFilter;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
-    if (supplierFilter) filters.supplier = supplierFilter;
     setAppliedFilters(filters);
   }
 
-  // Build initial filters on mount
   useEffect(() => {
     applyFilters();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function getExportFilters(type: "inspections" | "maintenance") {
     const filters: Record<string, unknown> = {};
-    if (vehicleFilter) filters.vehicle_id = vehicleFilter;
+    if (draftVehicleIds.length) filters.vehicle_ids = draftVehicleIds;
     if (brandFilter) filters.brand = brandFilter;
     if (dateFrom) filters.date_from = dateFrom;
     if (dateTo) filters.date_to = dateTo;
-    if (type === "maintenance" && supplierFilter) filters.supplier = supplierFilter;
+    if (type === "maintenance" && draftSupplierNames.length) filters.supplier_names = draftSupplierNames;
     return filters;
   }
 
@@ -118,9 +134,11 @@ export default function AnalyticsPage() {
         const timestamp = new Date().toISOString().split('T')[0];
         let filenameParts = ["analytics"];
         
-        if (vehicleFilter || brandFilter) {
-          const vehicleName = vehicles.find(v => v.id === vehicleFilter)?.vehicle_code || 
-                              (brandFilter ? `brand-${brandFilter}` : '');
+        if (draftVehicleIds.length || brandFilter) {
+          const vehicleName = draftVehicleIds.length === 1
+            ? (vehicles.find(v => v.id === draftVehicleIds[0])?.vehicle_code ?? "")
+            : draftVehicleIds.length > 1 ? `${draftVehicleIds.length}-vehicles`
+            : (brandFilter ? `brand-${brandFilter}` : "");
           if (vehicleName) filenameParts.push(vehicleName.replace(/[^a-zA-Z0-9]/g, '_'));
         }
         
@@ -182,51 +200,53 @@ export default function AnalyticsPage() {
         {/* Filters Panel */}
         <form
           className="rounded-xl bg-white p-4 shadow-sm"
-          onSubmit={(e) => {
-            e.preventDefault();
-            applyFilters();
-          }}
+          onSubmit={(e) => { e.preventDefault(); applyFilters(); }}
         >
           <h3 className="mb-4 text-lg font-bold text-slate-900">Filters</h3>
           <div className="space-y-3">
+
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Brand</span>
               <select
                 value={brandFilter}
                 onChange={(e) => setBrandFilter(e.target.value)}
-                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
+                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               >
                 <option value="">All Brands</option>
-                {Array.from(new Set(vehicles.map((v) => v.brand).filter(Boolean))).map((brand) => (
-                  <option key={brand} value={brand || ""}>
-                    {brand}
-                  </option>
+                {uniqueBrands.map((brand) => (
+                  <option key={brand} value={brand}>{brand}</option>
                 ))}
               </select>
             </label>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Vehicle</span>
-              <select
-                value={vehicleFilter}
-                onChange={(e) => setVehicleFilter(e.target.value)}
-                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
-              >
-                <option value="">All Vehicles</option>
-                {vehicles.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div>
+              <span className="mb-1 block text-sm font-semibold text-slate-700">Vehicles</span>
+              <MultiSelectDropdown
+                options={vehicleOptions}
+                selected={draftVehicleIds}
+                onChange={setDraftVehicleIds}
+                placeholder="All vehicles…"
+                accent="blue"
+              />
+            </div>
+
+            <div>
+              <span className="mb-1 block text-sm font-semibold text-slate-700">Suppliers</span>
+              <MultiSelectDropdown
+                options={supplierOptions}
+                selected={draftSupplierNames}
+                onChange={setDraftSupplierNames}
+                placeholder="All suppliers…"
+                accent="blue"
+              />
+            </div>
 
             <label className="block">
               <span className="mb-1 block text-sm font-semibold text-slate-700">Type</span>
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as "all" | "inspections" | "maintenance")}
-                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
+                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
               >
                 <option value="all">All (Inspection + Maintenance)</option>
                 <option value="inspections">Inspections Only</option>
@@ -241,7 +261,7 @@ export default function AnalyticsPage() {
                   type="datetime-local"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
+                  className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                 />
               </label>
               <label className="block">
@@ -250,34 +270,16 @@ export default function AnalyticsPage() {
                   type="datetime-local"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
-                  className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
+                  className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
                 />
               </label>
             </div>
 
-            <label className="block">
-              <span className="mb-1 block text-sm font-semibold text-slate-700">Supplier</span>
-              <input
-                type="text"
-                value={supplierFilter}
-                onChange={(e) => setSupplierFilter(e.target.value)}
-                placeholder="Filter by supplier..."
-                className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm focus:border-blue-500"
-              />
-            </label>
-
             <div className="grid grid-cols-2 gap-2">
-              <button
-                type="submit"
-                className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white hover:bg-blue-700"
-              >
+              <button type="submit" className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white active:bg-blue-700">
                 Apply Filters
               </button>
-              <button
-                type="button"
-                onClick={handleExport}
-                className="w-full rounded-lg bg-slate-900 py-2.5 font-semibold text-white hover:bg-slate-800"
-              >
+              <button type="button" onClick={handleExport} className="w-full rounded-lg bg-slate-900 py-2.5 font-semibold text-white active:bg-slate-800">
                 Export
               </button>
             </div>

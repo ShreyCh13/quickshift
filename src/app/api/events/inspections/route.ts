@@ -39,29 +39,66 @@ export async function GET(req: Request) {
       )
       .eq("is_deleted", false);
 
-    // Vehicle filters
-    const vehicleResult = await getVehicleIdsByFilter(supabase, {
-      vehicle_id: filters.vehicle_id,
-      vehicle_query: filters.vehicle_query,
-      brand: filters.brand,
-    });
+    // --- Vehicle filter ---
+    const hasVehicleIds = filters.vehicle_ids && filters.vehicle_ids.length > 0;
+    let resolvedVehicleIds: string[] = [];
 
-    if (vehicleResult.noMatch) {
-      return NextResponse.json(emptyPaginatedResponse("inspections", pagination));
+    if (hasVehicleIds) {
+      resolvedVehicleIds = filters.vehicle_ids!;
+    } else if (filters.vehicle_id || filters.vehicle_query || filters.brand) {
+      const vehicleResult = await getVehicleIdsByFilter(supabase, {
+        vehicle_id: filters.vehicle_id,
+        vehicle_query: filters.vehicle_query,
+        brand: filters.brand,
+      });
+      if (vehicleResult.noMatch) {
+        return NextResponse.json(emptyPaginatedResponse("inspections", pagination));
+      }
+      resolvedVehicleIds = vehicleResult.ids;
     }
 
-    if (vehicleResult.ids.length === 1) {
-      query = query.eq("vehicle_id", vehicleResult.ids[0]);
-    } else if (vehicleResult.ids.length > 1) {
-      query = query.in("vehicle_id", vehicleResult.ids);
+    // --- Driver filter ---
+    const hasDriverNames = filters.driver_names && filters.driver_names.length > 0;
+    const filterMode = filters.filter_mode ?? "and";
+
+    // Apply vehicle + driver with AND / OR logic
+    if (resolvedVehicleIds.length > 0 && hasDriverNames) {
+      if (filterMode === "or") {
+        const vehiclePart = resolvedVehicleIds.length === 1
+          ? `vehicle_id.eq.${resolvedVehicleIds[0]}`
+          : `vehicle_id.in.(${resolvedVehicleIds.join(",")})`;
+        const driverPart = filters.driver_names!
+          .map((n) => `driver_name.eq."${n.replace(/"/g, '\\"')}"`)
+          .join(",");
+        query = query.or(`${vehiclePart},${driverPart}`);
+      } else {
+        if (resolvedVehicleIds.length === 1) query = query.eq("vehicle_id", resolvedVehicleIds[0]);
+        else query = query.in("vehicle_id", resolvedVehicleIds);
+        query = query.in("driver_name", filters.driver_names!);
+      }
+    } else {
+      if (resolvedVehicleIds.length === 1) query = query.eq("vehicle_id", resolvedVehicleIds[0]);
+      else if (resolvedVehicleIds.length > 1) query = query.in("vehicle_id", resolvedVehicleIds);
+
+      if (hasDriverNames) query = query.in("driver_name", filters.driver_names!);
+      else if (filters.driver_name) query = query.ilike("driver_name", `%${filters.driver_name}%`);
     }
 
     // Date filters
     query = applyDateFilters(query, filters);
 
-    // Driver name search
-    if (filters.driver_name) {
-      query = query.ilike("driver_name", `%${filters.driver_name}%`);
+    // Universal search across vehicle code/plate, driver, odometer
+    if (filters.search?.trim()) {
+      const term = filters.search.trim();
+      const { data: matchingVehicles } = await supabase
+        .from("vehicles")
+        .select("id")
+        .or(`vehicle_code.ilike.%${term}%,plate_number.ilike.%${term}%,brand.ilike.%${term}%,model.ilike.%${term}%`);
+      const vehicleIdPart =
+        matchingVehicles && matchingVehicles.length > 0
+          ? `,vehicle_id.in.(${matchingVehicles.map((v) => v.id).join(",")})`
+          : "";
+      query = query.or(`driver_name.ilike.%${term}%${vehicleIdPart}`);
     }
 
     const { data, error, count } = await query

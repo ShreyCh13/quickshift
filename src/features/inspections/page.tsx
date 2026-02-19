@@ -9,8 +9,9 @@ import { getSessionHeader, loadSession, clearSession } from "@/lib/auth";
 import type { Session, ChecklistItem } from "@/lib/types";
 import { buildExportUrl, updateInspection } from "./api";
 import Skeleton from "@/components/Skeleton";
-import { useInspectionsInfinite, useVehicleDropdown, useDeleteInspection, queryKeys } from "@/hooks/useQueries";
+import { useInspectionsInfinite, useVehicleDropdown, useDeleteInspection, useDrivers, queryKeys } from "@/hooks/useQueries";
 import { INSPECTION_CATEGORIES } from "@/lib/constants";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
 interface InspectionItem {
   id: string;
@@ -50,11 +51,15 @@ export default function InspectionsPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
-  const [vehicleFilter, setVehicleFilter] = useState("");
-  const [vehicleSearch, setVehicleSearch] = useState("");
-  const [driverSearch, setDriverSearch] = useState("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+
+  // Draft filter state
+  const [draftVehicleIds, setDraftVehicleIds] = useState<string[]>([]);
+  const [draftDriverNames, setDraftDriverNames] = useState<string[]>([]);
+  const [draftFilterMode, setDraftFilterMode] = useState<"and" | "or">("and");
+  const [draftSearch, setDraftSearch] = useState("");
+  const [draftDateFrom, setDraftDateFrom] = useState("");
+  const [draftDateTo, setDraftDateTo] = useState("");
+
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<{
@@ -62,17 +67,41 @@ export default function InspectionsPage() {
     driver_name: string;
     remarks_json: Record<string, ChecklistItem>;
   }>({ odometer_km: 0, driver_name: "", remarks_json: {} });
-  const [appliedFilters, setAppliedFilters] = useState<Record<string, string>>({});
+
+  const [appliedFilters, setAppliedFilters] = useState<{
+    vehicle_ids?: string[];
+    driver_names?: string[];
+    filter_mode?: "and" | "or";
+    search?: string;
+    date_from?: string;
+    date_to?: string;
+  }>({});
+
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = session?.user.role === "admin";
   const { data: vehicles = [] } = useVehicleDropdown();
+  const { data: drivers = [] } = useDrivers();
+
+  const vehicleOptions = useMemo(
+    () => vehicles.map((v) => ({
+      value: v.id,
+      label: `${v.vehicle_code}${v.brand ? ` · ${v.brand}` : ""}${v.model ? ` ${v.model}` : ""}`,
+    })),
+    [vehicles]
+  );
+
+  const driverOptions = useMemo(
+    () => drivers.map((d) => ({ value: d.name, label: d.name })),
+    [drivers]
+  );
 
   const filters = useMemo(() => {
-    const f: Record<string, string> = {};
-    if (appliedFilters.vehicle_id) f.vehicle_id = appliedFilters.vehicle_id;
-    if (appliedFilters.vehicle_query) f.vehicle_query = appliedFilters.vehicle_query;
-    if (appliedFilters.driver_name) f.driver_name = appliedFilters.driver_name;
+    const f: Record<string, unknown> = {};
+    if (appliedFilters.vehicle_ids?.length) f.vehicle_ids = appliedFilters.vehicle_ids;
+    if (appliedFilters.driver_names?.length) f.driver_names = appliedFilters.driver_names;
+    if (appliedFilters.filter_mode) f.filter_mode = appliedFilters.filter_mode;
+    if (appliedFilters.search) f.search = appliedFilters.search;
     if (appliedFilters.date_from) f.date_from = appliedFilters.date_from;
     if (appliedFilters.date_to) f.date_to = appliedFilters.date_to;
     return Object.keys(f).length > 0 ? f : undefined;
@@ -109,21 +138,24 @@ export default function InspectionsPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   function handleApplyFilters() {
-    const f: Record<string, string> = {};
-    if (vehicleFilter) f.vehicle_id = vehicleFilter;
-    if (vehicleSearch) f.vehicle_query = vehicleSearch;
-    if (driverSearch) f.driver_name = driverSearch;
-    if (dateFrom) f.date_from = dateFrom;
-    if (dateTo) f.date_to = dateTo;
-    setAppliedFilters(f);
+    setAppliedFilters({
+      vehicle_ids: draftVehicleIds.length ? draftVehicleIds : undefined,
+      driver_names: draftDriverNames.length ? draftDriverNames : undefined,
+      filter_mode:
+        draftVehicleIds.length > 0 && draftDriverNames.length > 0 ? draftFilterMode : undefined,
+      search: draftSearch.trim() || undefined,
+      date_from: draftDateFrom || undefined,
+      date_to: draftDateTo || undefined,
+    });
   }
 
   function handleClearFilters() {
-    setVehicleFilter("");
-    setVehicleSearch("");
-    setDriverSearch("");
-    setDateFrom("");
-    setDateTo("");
+    setDraftVehicleIds([]);
+    setDraftDriverNames([]);
+    setDraftFilterMode("and");
+    setDraftSearch("");
+    setDraftDateFrom("");
+    setDraftDateTo("");
     setAppliedFilters({});
   }
 
@@ -131,7 +163,7 @@ export default function InspectionsPage() {
     const exportUrl = buildExportUrl({
       type: "inspections",
       format: "xlsx",
-      filters: Object.keys(appliedFilters).length ? appliedFilters : undefined,
+      filters: Object.keys(appliedFilters).length ? (appliedFilters as Record<string, unknown>) : undefined,
     });
     const res = await fetch(exportUrl, { headers: { ...getSessionHeader() } });
     if (!res.ok) { alert("Export failed"); return; }
@@ -201,54 +233,82 @@ export default function InspectionsPage() {
         <div className="mb-4 space-y-3 rounded-xl bg-white p-4 shadow">
           <div className="flex items-center justify-between">
             <h3 className="font-bold text-slate-900">Filters</h3>
-            {Object.keys(appliedFilters).length > 0 && (
+            {Object.keys(appliedFilters).some((k) => {
+              const v = appliedFilters[k as keyof typeof appliedFilters];
+              return Array.isArray(v) ? v.length > 0 : !!v;
+            }) && (
               <button onClick={handleClearFilters} className="text-xs font-medium text-blue-600 active:text-blue-800">
                 Clear all
               </button>
             )}
           </div>
+
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Vehicle</label>
-            <select
-              value={vehicleFilter}
-              onChange={(e) => setVehicleFilter(e.target.value)}
-              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">All Vehicles</option>
-              {vehicles.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.vehicle_code} {v.plate_number ? `(${v.plate_number})` : ""} - {v.brand} {v.model}
-                </option>
-              ))}
-            </select>
+            <label className="text-xs font-medium text-slate-600">Vehicles</label>
+            <MultiSelectDropdown
+              options={vehicleOptions}
+              selected={draftVehicleIds}
+              onChange={setDraftVehicleIds}
+              placeholder="All vehicles…"
+              accent="blue"
+            />
           </div>
+
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Search (vehicle code / plate)</label>
+            <label className="text-xs font-medium text-slate-600">Drivers</label>
+            <MultiSelectDropdown
+              options={driverOptions}
+              selected={draftDriverNames}
+              onChange={setDraftDriverNames}
+              placeholder="All drivers…"
+              accent="blue"
+            />
+          </div>
+
+          {draftVehicleIds.length > 0 && draftDriverNames.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg bg-slate-50 p-2">
+              <span className="text-xs text-slate-500">Match mode:</span>
+              <div className="flex overflow-hidden rounded-lg border-2 border-slate-200 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setDraftFilterMode("and")}
+                  className={`px-3 py-1.5 transition ${draftFilterMode === "and" ? "bg-blue-600 text-white" : "bg-white text-slate-600 active:bg-slate-100"}`}
+                >
+                  AND
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftFilterMode("or")}
+                  className={`px-3 py-1.5 transition ${draftFilterMode === "or" ? "bg-blue-600 text-white" : "bg-white text-slate-600 active:bg-slate-100"}`}
+                >
+                  OR
+                </button>
+              </div>
+              <span className="text-xs text-slate-400">
+                {draftFilterMode === "and" ? "vehicle AND driver must match" : "vehicle OR driver match"}
+              </span>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-slate-600">Search</label>
             <input
               type="text"
-              value={vehicleSearch}
-              onChange={(e) => setVehicleSearch(e.target.value)}
-              placeholder="Search vehicles..."
+              value={draftSearch}
+              onChange={(e) => setDraftSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") handleApplyFilters(); }}
+              placeholder="Search vehicles, drivers, odometer…"
               className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
             />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-slate-600">Driver Name</label>
-            <input
-              type="text"
-              value={driverSearch}
-              onChange={(e) => setDriverSearch(e.target.value)}
-              placeholder="Search by driver name..."
-              className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
-            />
-          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-medium text-slate-600">From</label>
               <input
                 type="date"
-                value={dateFrom ? dateFrom.split("T")[0] : ""}
-                onChange={(e) => setDateFrom(e.target.value ? `${e.target.value}T00:00` : "")}
+                value={draftDateFrom ? draftDateFrom.split("T")[0] : ""}
+                onChange={(e) => setDraftDateFrom(e.target.value ? `${e.target.value}T00:00` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
               />
             </div>
@@ -256,23 +316,18 @@ export default function InspectionsPage() {
               <label className="text-xs font-medium text-slate-600">To</label>
               <input
                 type="date"
-                value={dateTo ? dateTo.split("T")[0] : ""}
-                onChange={(e) => setDateTo(e.target.value ? `${e.target.value}T23:59` : "")}
+                value={draftDateTo ? draftDateTo.split("T")[0] : ""}
+                onChange={(e) => setDraftDateTo(e.target.value ? `${e.target.value}T23:59` : "")}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-3 text-base focus:border-blue-500 focus:outline-none"
               />
             </div>
           </div>
+
           <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={handleApplyFilters}
-              className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white active:bg-blue-700"
-            >
+            <button onClick={handleApplyFilters} className="w-full rounded-lg bg-blue-600 py-2.5 font-semibold text-white active:bg-blue-700">
               Apply Filters
             </button>
-            <button
-              onClick={handleExport}
-              className="w-full rounded-lg bg-slate-900 py-2.5 font-semibold text-white active:bg-slate-800"
-            >
+            <button onClick={handleExport} className="w-full rounded-lg bg-slate-900 py-2.5 font-semibold text-white active:bg-slate-800">
               Export
             </button>
           </div>

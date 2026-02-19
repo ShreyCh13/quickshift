@@ -23,9 +23,13 @@ interface VehicleFilters {
 interface InspectionFilters {
   vehicle_id?: string;
   vehicle_query?: string;
+  vehicle_ids?: string[];
+  driver_name?: string;
+  driver_names?: string[];
+  filter_mode?: "and" | "or";
+  search?: string;
   date_from?: string;
   date_to?: string;
-  driver_name?: string;
 }
 
 interface MaintenanceFilters {
