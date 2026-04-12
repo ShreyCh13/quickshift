@@ -160,6 +160,7 @@ create table if not exists public.maintenance (
   bill_number text not null check (length(bill_number) <= 100),
   supplier_name text not null check (length(supplier_name) <= 200),
   supplier_invoice_number text not null default '' check (length(supplier_invoice_number) <= 100),
+  supplier_invoice_date date null,
   amount numeric(12,2) not null check (amount >= 0),
   remarks text not null check (length(remarks) <= 5000),
   created_by uuid not null references public.users(id) on delete restrict,

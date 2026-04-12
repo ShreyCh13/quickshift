@@ -90,6 +90,8 @@ export type MaintenanceWithVehicle = {
   odometer_km: number;
   bill_number: string;
   supplier_name: string;
+  supplier_invoice_number?: string;
+  supplier_invoice_date?: string | null;
   amount: number;
   remarks?: string | null;
   created_by: string;

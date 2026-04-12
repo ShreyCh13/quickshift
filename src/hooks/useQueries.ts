@@ -82,7 +82,8 @@ export const queryKeys = {
   },
   drivers: {
     all: ["drivers"] as const,
-    list: (search?: string) => ["drivers", "list", search] as const,
+    list: (search?: string, includeInactive?: boolean) =>
+      ["drivers", "list", search ?? "", Boolean(includeInactive)] as const,
   },
   analytics: {
     all: ["analytics"] as const,
@@ -283,6 +284,7 @@ export function useMaintenanceInfinite(filters?: MaintenanceFilters, pageSize = 
           bill_number: string;
           supplier_name: string;
           supplier_invoice_number: string;
+          supplier_invoice_date: string | null;
           amount: number;
           remarks: string;
           created_by?: string;
@@ -394,11 +396,14 @@ export function useDeleteSupplier() {
 // Driver Hooks
 // ============================================
 
-export function useDrivers(search?: string) {
+export function useDrivers(search?: string, options?: { includeInactive?: boolean }) {
+  const includeInactive = options?.includeInactive === true;
   return useQuery({
-    queryKey: queryKeys.drivers.list(search),
+    queryKey: queryKeys.drivers.list(search, includeInactive),
     queryFn: () => {
-      const params = new URLSearchParams({ active: "true" });
+      const params = new URLSearchParams();
+      if (includeInactive) params.set("includeInactive", "true");
+      else params.set("active", "true");
       if (search) params.set("search", search);
       return fetchWithSession<{ drivers: Array<{ id: string; name: string; is_active: boolean }> }>(
         `/api/drivers?${params}`
@@ -426,7 +431,7 @@ export function useCreateDriver() {
 export function useUpdateDriver() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; name: string }) =>
+    mutationFn: (data: { id: string; name?: string; is_active?: boolean }) =>
       fetchWithSession("/api/drivers", { method: "PUT", body: JSON.stringify(data) }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.drivers.all });

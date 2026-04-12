@@ -28,6 +28,14 @@ async function addSupplier(name: string) {
   });
 }
 
+function todayIsoDate(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function NewMaintenanceForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -45,6 +53,7 @@ function NewMaintenanceForm() {
     bill_number: "",
     supplier_name: "",
     supplier_invoice_number: "",
+    supplier_invoice_date: todayIsoDate(),
     amount: "",
     remarks: "",
   });
@@ -67,9 +76,31 @@ function NewMaintenanceForm() {
   }
 
   async function handleSubmit() {
-    const { vehicle_id, odometer_km, bill_number, supplier_name, supplier_invoice_number, amount, remarks } = formData;
-    if (!vehicle_id || !odometer_km || !bill_number || !supplier_name || !supplier_invoice_number || !amount || !remarks) {
+    const {
+      vehicle_id,
+      odometer_km,
+      bill_number,
+      supplier_name,
+      supplier_invoice_number,
+      supplier_invoice_date,
+      amount,
+      remarks,
+    } = formData;
+    if (
+      !vehicle_id ||
+      !odometer_km ||
+      !bill_number ||
+      !supplier_name ||
+      !supplier_invoice_number ||
+      !supplier_invoice_date ||
+      !amount ||
+      !remarks
+    ) {
       setError("All fields are required");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(supplier_invoice_date)) {
+      setError("Supplier invoice date must be a valid calendar date");
       return;
     }
 
@@ -83,6 +114,7 @@ function NewMaintenanceForm() {
         bill_number: bill_number.trim(),
         supplier_name: supplier_name.trim(),
         supplier_invoice_number: supplier_invoice_number.trim(),
+        supplier_invoice_date,
         amount: Number(amount),
         remarks: remarks.trim(),
       });
@@ -166,11 +198,23 @@ function NewMaintenanceForm() {
               />
 
               <FormField
-                label="Supplier Invoice Number *"
+                label="Supplier invoice number *"
                 value={formData.supplier_invoice_number}
                 onChange={(e) => set("supplier_invoice_number", e.target.value)}
                 placeholder="e.g. INV-2024-5678"
               />
+
+              <label className="block">
+                <span className="mb-2 block text-sm font-semibold text-slate-700">
+                  Supplier invoice date <span className="text-red-500">*</span>
+                </span>
+                <input
+                  type="date"
+                  value={formData.supplier_invoice_date}
+                  onChange={(e) => set("supplier_invoice_date", e.target.value)}
+                  className="w-full rounded-lg border-2 border-slate-200 px-4 py-3 text-base focus:border-emerald-500 focus:outline-none"
+                />
+              </label>
 
               <FormField
                 label="Amount (₹) *"

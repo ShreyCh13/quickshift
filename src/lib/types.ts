@@ -108,6 +108,7 @@ export type MaintenanceRow = {
   bill_number: string;
   supplier_name: string;
   supplier_invoice_number: string;
+  supplier_invoice_date: string | null;
   amount: number;
   remarks: string;
   created_by: string;

@@ -33,7 +33,7 @@ export async function GET(req: Request) {
     // Build base query with user join
     let query = supabase
       .from("maintenance")
-      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, supplier_invoice_number, amount, remarks, created_by, updated_by, is_deleted, users!maintenance_created_by_fkey(id, display_name)", { count: "exact" })
+      .select("id, vehicle_id, created_at, updated_at, odometer_km, bill_number, supplier_name, supplier_invoice_number, supplier_invoice_date, amount, remarks, created_by, updated_by, is_deleted, users!maintenance_created_by_fkey(id, display_name)", { count: "exact" })
       .eq("is_deleted", false);
 
     // --- Vehicle filter ---
@@ -177,6 +177,9 @@ export async function POST(req: Request) {
     if (!input.supplier_invoice_number || !input.supplier_invoice_number.trim()) {
       return NextResponse.json({ error: "Supplier invoice number is required" }, { status: 400 });
     }
+    if (!input.supplier_invoice_date || !input.supplier_invoice_date.trim()) {
+      return NextResponse.json({ error: "Supplier invoice date is required" }, { status: 400 });
+    }
     if (input.amount < 0) {
       return NextResponse.json({ error: "Amount cannot be negative" }, { status: 400 });
     }
@@ -184,10 +187,13 @@ export async function POST(req: Request) {
     const { data, error } = await supabase
       .from("maintenance")
       .insert({
-        ...input,
+        vehicle_id: input.vehicle_id,
+        odometer_km: input.odometer_km,
         bill_number: input.bill_number.trim(),
         supplier_name: input.supplier_name.trim(),
         supplier_invoice_number: input.supplier_invoice_number.trim(),
+        supplier_invoice_date: input.supplier_invoice_date,
+        amount: input.amount,
         remarks: input.remarks?.trim() || null,
         created_by: session.user.id,
       })
@@ -221,7 +227,12 @@ export async function PUT(req: Request) {
   }
   
   try {
-    const input = maintenanceUpdateSchema.parse(await req.json());
+    const rawBody: unknown = await req.json();
+    if (rawBody && typeof rawBody === "object" && "supplier_invoice_date" in rawBody) {
+      const b = rawBody as { supplier_invoice_date?: unknown };
+      if (b.supplier_invoice_date === "") b.supplier_invoice_date = null;
+    }
+    const input = maintenanceUpdateSchema.parse(rawBody);
     const { id, ...updates } = input;
     const supabase = getSupabaseAdmin();
     
@@ -282,16 +293,35 @@ export async function PUT(req: Request) {
     if (updates.supplier_invoice_number !== undefined && (!updates.supplier_invoice_number || !updates.supplier_invoice_number.trim())) {
       return NextResponse.json({ error: "Supplier invoice number cannot be empty" }, { status: 400 });
     }
+    if (
+      updates.supplier_invoice_date !== undefined &&
+      updates.supplier_invoice_date !== null &&
+      !/^\d{4}-\d{2}-\d{2}$/.test(updates.supplier_invoice_date)
+    ) {
+      return NextResponse.json({ error: "Supplier invoice date must be YYYY-MM-DD" }, { status: 400 });
+    }
     if (updates.amount !== undefined && updates.amount < 0) {
       return NextResponse.json({ error: "Amount cannot be negative" }, { status: 400 });
     }
 
-    // Prepare update data with trimmed values
-    const updateData: Record<string, unknown> = { ...updates, updated_by: session.user.id };
-    if (updates.bill_number !== undefined) updateData.bill_number = updates.bill_number.trim();
-    if (updates.supplier_name !== undefined) updateData.supplier_name = updates.supplier_name.trim();
-    if (updates.supplier_invoice_number !== undefined) updateData.supplier_invoice_number = updates.supplier_invoice_number.trim();
-    if (updates.remarks !== undefined) updateData.remarks = updates.remarks?.trim() || null;
+    // Only persist keys that were sent (partial update); omit undefined from spread
+    const definedUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([, v]) => v !== undefined),
+    ) as Record<string, unknown>;
+
+    const updateData: Record<string, unknown> = { ...definedUpdates, updated_by: session.user.id };
+    if (definedUpdates.bill_number !== undefined) updateData.bill_number = String(definedUpdates.bill_number).trim();
+    if (definedUpdates.supplier_name !== undefined) updateData.supplier_name = String(definedUpdates.supplier_name).trim();
+    if (definedUpdates.supplier_invoice_number !== undefined) {
+      updateData.supplier_invoice_number = String(definedUpdates.supplier_invoice_number).trim();
+    }
+    if (definedUpdates.supplier_invoice_date !== undefined) {
+      updateData.supplier_invoice_date =
+        definedUpdates.supplier_invoice_date === null || definedUpdates.supplier_invoice_date === ""
+          ? null
+          : definedUpdates.supplier_invoice_date;
+    }
+    if (definedUpdates.remarks !== undefined) updateData.remarks = String(definedUpdates.remarks).trim() || null;
     
     const { data, error } = await supabase
       .from("maintenance")

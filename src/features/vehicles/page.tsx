@@ -132,10 +132,26 @@ export default function VehiclesPage() {
     invalidateAndRefetch();
   }
 
-  async function handleDelete(id: string, code: string) {
-    if (!confirm(`Deactivate vehicle ${code}?`)) return;
+  async function handleMarkInactive(id: string, code: string) {
+    if (
+      !confirm(
+        `Mark vehicle ${code} inactive? It will be hidden from new inspections and maintenance until marked active again.`,
+      )
+    )
+      return;
     setLocalError(null);
     const res = await deleteVehicle(id, true);
+    if (res.error) {
+      setLocalError(res.error);
+      return;
+    }
+    invalidateAndRefetch();
+  }
+
+  async function handleMarkActive(id: string, code: string) {
+    if (!confirm(`Mark vehicle ${code} active again?`)) return;
+    setLocalError(null);
+    const res = await updateVehicle({ id, is_active: true });
     if (res.error) {
       setLocalError(res.error);
       return;
@@ -383,49 +399,67 @@ export default function VehiclesPage() {
                       </div>
                     </div>
                     {!v.is_active && (
-                      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
-                        INACTIVE
+                      <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                        Inactive
                       </span>
                     )}
                   </div>
-                  {v.is_active && (
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => router.push(`/inspections/new?vehicle=${v.id}`)}
-                        className="flex-1 min-w-[70px] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-blue-700"
-                      >
-                        Inspect
-                      </button>
-                      <button
-                        onClick={() => router.push(`/maintenance/new?vehicle=${v.id}`)}
-                        className="flex-1 min-w-[70px] rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-emerald-700"
-                      >
-                        Maintain
-                      </button>
-                      <button
-                        onClick={() => router.push(`/vehicles/history?vehicle=${v.id}`)}
-                        className="flex-1 min-w-[70px] rounded-lg bg-purple-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-purple-700"
-                      >
-                        History
-                      </button>
-                      {isAdmin && (
-                        <>
-                          <button
-                            onClick={() => startEdit(v)}
-                            className="flex-1 min-w-[60px] rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-semibold text-white active:bg-amber-600"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDelete(v.id, v.vehicle_code)}
-                            className="flex-1 min-w-[60px] rounded-lg bg-red-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-red-700"
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap gap-2">
+                    {v.is_active && (
+                      <>
+                        <button
+                          onClick={() => router.push(`/inspections/new?vehicle=${v.id}`)}
+                          className="flex-1 min-w-[70px] rounded-lg bg-blue-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-blue-700"
+                        >
+                          Inspect
+                        </button>
+                        <button
+                          onClick={() => router.push(`/maintenance/new?vehicle=${v.id}`)}
+                          className="flex-1 min-w-[70px] rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-emerald-700"
+                        >
+                          Maintain
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => router.push(`/vehicles/history?vehicle=${v.id}`)}
+                      className="flex-1 min-w-[70px] rounded-lg bg-purple-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-purple-700"
+                    >
+                      History
+                    </button>
+                    {isAdmin && v.is_active && (
+                      <>
+                        <button
+                          onClick={() => startEdit(v)}
+                          className="flex-1 min-w-[60px] rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-semibold text-white active:bg-amber-600"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleMarkInactive(v.id, v.vehicle_code)}
+                          className="flex-1 min-w-[60px] rounded-lg bg-slate-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-slate-700"
+                        >
+                          Mark inactive
+                        </button>
+                      </>
+                    )}
+                    {isAdmin && !v.is_active && (
+                      <>
+                        <button
+                          onClick={() => startEdit(v)}
+                          className="flex-1 min-w-[60px] rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-semibold text-white active:bg-amber-600"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleMarkActive(v.id, v.vehicle_code)}
+                          className="flex-1 min-w-[60px] rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-emerald-700"
+                        >
+                          Mark active
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

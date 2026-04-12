@@ -136,7 +136,7 @@ function refreshMaintenance() {
   var data = fetchFromSupabase(
     '/rest/v1/maintenance' +
     '?select=id,created_at,odometer_km,bill_number,supplier_name' +
-    ',supplier_invoice_number,amount,remarks,created_by' +
+    ',supplier_invoice_number,supplier_invoice_date,amount,remarks,created_by' +
     ',vehicles!inner(vehicle_code,brand,model)' +
     '&is_deleted=eq.false' +
     '&order=created_at.desc' +
@@ -149,7 +149,7 @@ function refreshMaintenance() {
 
   var headers = [
     'Date', 'Vehicle Code', 'Brand / Model',
-    'Bill Number', 'Supplier', 'Invoice No.',
+    'Bill Number', 'Supplier', 'Supplier invoice number', 'Supplier invoice date',
     'Amount (MYR)', 'Cost Tier', 'Odometer (km)', 'Remarks', 'Created By'
   ];
   var rows = [headers];
@@ -158,6 +158,9 @@ function refreshMaintenance() {
     var row = data[i];
     var vehicle = row.vehicles || {};
     var amount = row.amount || 0;
+    var invDate = row.supplier_invoice_date
+      ? formatDate(row.supplier_invoice_date + 'T12:00:00Z')
+      : '';
     rows.push([
       formatDate(row.created_at),
       vehicle.vehicle_code || '',
@@ -165,6 +168,7 @@ function refreshMaintenance() {
       row.bill_number || '',
       row.supplier_name || '',
       row.supplier_invoice_number || '',
+      invDate,
       amount,
       getCostTier(amount),
       row.odometer_km || 0,
@@ -179,9 +183,9 @@ function refreshMaintenance() {
 
   styleHeaders_(sheet, headers.length);
 
-  // Color-code Cost Tier column (col 8)
+  // Color-code Cost Tier column (after supplier invoice date + amount)
   for (var r = 2; r <= rows.length; r++) {
-    var cell = sheet.getRange(r, 8);
+    var cell = sheet.getRange(r, 9);
     var val = cell.getValue();
     if (val === 'Low') {
       cell.setBackground('#dcfce7');

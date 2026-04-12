@@ -9,7 +9,8 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const search = url.searchParams.get("search") || "";
-  const activeOnly = url.searchParams.get("active") !== "false";
+  const includeInactive = url.searchParams.get("includeInactive") === "true";
+  const activeParam = url.searchParams.get("active");
 
   const supabase = getSupabaseAdmin();
 
@@ -18,7 +19,10 @@ export async function GET(req: Request) {
     .select("id, name, is_active, created_at", { count: "exact" })
     .order("name", { ascending: true });
 
-  if (activeOnly) query = query.eq("is_active", true);
+  if (!includeInactive) {
+    if (activeParam === "false") query = query.eq("is_active", false);
+    else query = query.eq("is_active", true);
+  }
   if (search.trim()) query = query.ilike("name", `%${search.trim()}%`);
 
   const { data, error, count } = await query.limit(500);
@@ -48,7 +52,13 @@ export async function POST(req: Request) {
 
     if (error) {
       if (error.code === "23505") {
-        return NextResponse.json({ error: "Driver name already exists" }, { status: 409 });
+        return NextResponse.json(
+          {
+            error:
+              "Driver name already exists. If they rejoined, open Drivers and use Mark active on the inactive entry instead of adding a duplicate.",
+          },
+          { status: 409 },
+        );
       }
       console.error("Driver POST error:", error);
       return NextResponse.json({ error: "Failed to create driver" }, { status: 500 });
@@ -102,14 +112,14 @@ export async function DELETE(req: Request) {
     const { id } = idSchema.parse(await req.json());
     const supabase = getSupabaseAdmin();
 
-    const { error } = await supabase.from("drivers").delete().eq("id", id);
+    const { error } = await supabase.from("drivers").update({ is_active: false }).eq("id", id);
 
     if (error) {
-      console.error("Driver DELETE error:", error);
-      return NextResponse.json({ error: "Failed to delete driver" }, { status: 500 });
+      console.error("Driver DELETE (mark inactive) error:", error);
+      return NextResponse.json({ error: "Failed to mark driver inactive" }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, soft: true });
   } catch {
     return NextResponse.json({ error: "Bad request" }, { status: 400 });
   }

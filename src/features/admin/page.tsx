@@ -92,7 +92,16 @@ export default function AdminPage() {
   const { data: users = [], isLoading: usersLoading, refetch: refetchUsers } = useUsers();
   const { data: remarkFieldsData = [], isLoading: remarkFieldsLoading, refetch: refetchRemarkFields } = useRemarkFields();
   const { data: suppliers = [], isLoading: suppliersLoading, refetch: refetchSuppliers } = useSuppliers();
-  const { data: drivers = [], isLoading: driversLoading, refetch: refetchDrivers } = useDrivers();
+  const { data: drivers = [], isLoading: driversLoading, refetch: refetchDrivers } = useDrivers(undefined, {
+    includeInactive: true,
+  });
+
+  const driversSorted = useMemo(() => {
+    return [...drivers].sort((a, b) => {
+      if (a.is_active !== b.is_active) return a.is_active ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    });
+  }, [drivers]);
   const { data: checklistItemsData = [], isLoading: checklistLoading } = useChecklistItems();
   const { data: vehiclesData } = useVehicles(undefined, 1, 1);
   const { data: inspectionsCount } = useInspectionsCount();
@@ -249,11 +258,22 @@ export default function AdminPage() {
     }
   }
 
-  async function handleDeleteDriver(id: string) {
+  async function handleMarkInactiveDriver(id: string, name: string) {
+    if (!confirm(`Mark driver "${name}" inactive? They will disappear from inspection pickers until marked active again.`)) return;
+    setError(null);
     try {
       await deleteDriverMutation.mutateAsync(id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete driver");
+      setError(err instanceof Error ? err.message : "Failed to mark driver inactive");
+    }
+  }
+
+  async function handleMarkActiveDriver(id: string) {
+    setError(null);
+    try {
+      await updateDriverMutation.mutateAsync({ id, is_active: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark driver active");
     }
   }
 
@@ -635,7 +655,10 @@ export default function AdminPage() {
               <div className="space-y-4">
                 <div className="rounded-xl bg-white p-4 shadow">
                   <h2 className="mb-1 text-lg font-bold text-slate-900">Driver Names</h2>
-                  <p className="mb-4 text-sm text-slate-500">Manage the driver name list used in inspections</p>
+                  <p className="mb-4 text-sm text-slate-500">
+                    Manage the driver name list used in inspections. Inactive drivers stay listed here so you can mark
+                    them active again when they return.
+                  </p>
 
                   {/* Add driver */}
                   <div className="mb-4 flex gap-2">
@@ -655,16 +678,23 @@ export default function AdminPage() {
                     </button>
                   </div>
 
-                  <div className="text-xs font-medium text-slate-500 mb-2">{drivers.length} DRIVERS</div>
+                  <div className="text-xs font-medium text-slate-500 mb-2">
+                    {drivers.length} DRIVERS ({drivers.filter((d) => d.is_active).length} active)
+                  </div>
 
-                  {drivers.length === 0 ? (
+                  {driversSorted.length === 0 ? (
                     <div className="rounded-lg bg-slate-50 p-4 text-center text-sm text-slate-400">
                       No drivers yet. Add your first driver above.
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {drivers.map((driver) => (
-                        <div key={driver.id} className="rounded-lg border-2 border-slate-100 px-3 py-2.5">
+                      {driversSorted.map((driver) => (
+                        <div
+                          key={driver.id}
+                          className={`rounded-lg border-2 px-3 py-2.5 ${
+                            driver.is_active ? "border-slate-100" : "border-amber-200 bg-amber-50/50"
+                          }`}
+                        >
                           {editDriverId === driver.id ? (
                             <div className="flex items-center gap-2">
                               <input
@@ -689,25 +719,42 @@ export default function AdminPage() {
                               </button>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex min-w-0 flex-1 items-center gap-2">
                                 <span className="text-slate-400">🚗</span>
                                 <span className="font-medium text-slate-900">{driver.name}</span>
+                                {!driver.is_active && (
+                                  <span className="rounded bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                                    Inactive
+                                  </span>
+                                )}
                               </div>
-                              <div className="flex items-center gap-1">
+                              <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-1">
                                 <button
+                                  type="button"
                                   onClick={() => { setEditDriverId(driver.id); setEditDriverName(driver.name); }}
-                                  className="rounded p-1.5 text-slate-400 active:bg-slate-50"
+                                  className="rounded px-2 py-1.5 text-xs font-semibold text-slate-600 active:bg-slate-100"
                                 >
-                                  ✏️
+                                  Edit
                                 </button>
-                                {isAdmin && (
+                                {isAdmin && driver.is_active && (
                                   <button
-                                    onClick={() => handleDeleteDriver(driver.id)}
+                                    type="button"
+                                    onClick={() => handleMarkInactiveDriver(driver.id, driver.name)}
                                     disabled={deleteDriverMutation.isPending}
-                                    className="rounded p-1.5 text-red-400 active:bg-red-50 disabled:opacity-50"
+                                    className="rounded px-2 py-1.5 text-xs font-semibold text-slate-600 active:bg-slate-100 disabled:opacity-50"
                                   >
-                                    🗑️
+                                    Mark inactive
+                                  </button>
+                                )}
+                                {isAdmin && !driver.is_active && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkActiveDriver(driver.id)}
+                                    disabled={updateDriverMutation.isPending}
+                                    className="rounded bg-emerald-600 px-2 py-1.5 text-xs font-semibold text-white active:bg-emerald-700 disabled:opacity-50"
+                                  >
+                                    Mark active
                                   </button>
                                 )}
                               </div>

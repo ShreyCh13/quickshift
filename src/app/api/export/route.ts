@@ -33,6 +33,7 @@ interface MaintenanceRow {
   bill_number: string;
   supplier_name: string;
   supplier_invoice_number: string;
+  supplier_invoice_date: string | null;
   amount: number;
   remarks: string;
   vehicles: { vehicle_code: string; plate_number: string | null; brand: string | null; model: string | null } | null;
@@ -159,7 +160,7 @@ async function exportMaintenance(
 
   let query = supabase
     .from("maintenance")
-    .select("created_at, odometer_km, bill_number, supplier_name, supplier_invoice_number, amount, remarks, vehicles(vehicle_code, plate_number, brand, model), users!maintenance_created_by_fkey(display_name)")
+    .select("created_at, odometer_km, bill_number, supplier_name, supplier_invoice_number, supplier_invoice_date, amount, remarks, vehicles(vehicle_code, plate_number, brand, model), users!maintenance_created_by_fkey(display_name)")
     .eq("is_deleted", false);
 
   if (vehicleResult.ids.length === 1) query = query.eq("vehicle_id", vehicleResult.ids[0]);
@@ -225,7 +226,14 @@ export function mapMaintenanceRows(rows: MaintenanceRow[]): Record<string, unkno
       "Model": v?.model ?? "",
       "Odometer (km)": row.odometer_km ?? "",
       "Bill No.": row.bill_number ?? "",
-      "Invoice No.": row.supplier_invoice_number ?? "",
+      "Supplier invoice number": row.supplier_invoice_number ?? "",
+      "Supplier invoice date": row.supplier_invoice_date
+        ? new Date(row.supplier_invoice_date + "T12:00:00").toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "",
       "Supplier": row.supplier_name ?? "",
       "Amount (₹)": row.amount ?? 0,
       "Remarks": row.remarks ?? "",

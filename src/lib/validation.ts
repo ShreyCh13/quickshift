@@ -97,11 +97,15 @@ export const driverCreateSchema = z.object({
   name: z.string().min(1).max(200).trim(),
 });
 
-export const driverUpdateSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string().min(1).max(200).trim().optional(),
-  is_active: z.boolean().optional(),
-});
+export const driverUpdateSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string().min(1).max(200).trim().optional(),
+    is_active: z.boolean().optional(),
+  })
+  .refine((d) => d.name !== undefined || d.is_active !== undefined, {
+    message: "Provide name and/or is_active to update",
+  });
 
 // ============================================================================
 // Inspection Schemas
@@ -132,19 +136,28 @@ export const inspectionUpdateSchema = inspectionCreateSchema.extend({
 // Maintenance Schemas
 // ============================================================================
 
+const supplierInvoiceDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Supplier invoice date must be YYYY-MM-DD");
+
 export const maintenanceCreateSchema = z.object({
   vehicle_id: z.string().uuid(),
   odometer_km: z.number().int().min(0),
   bill_number: z.string().min(1).max(100),
   supplier_name: z.string().min(1).max(200),
   supplier_invoice_number: z.string().min(1).max(100),
+  supplier_invoice_date: supplierInvoiceDateSchema,
   amount: z.number().min(0),
   remarks: z.string().min(1).max(5000),
 });
 
-export const maintenanceUpdateSchema = maintenanceCreateSchema.extend({
-  id: z.string().uuid(),
-});
+/** Partial updates; only provided fields are applied (see maintenance route PUT). */
+export const maintenanceUpdateSchema = maintenanceCreateSchema
+  .partial()
+  .extend({
+    id: z.string().uuid(),
+    supplier_invoice_date: z.union([supplierInvoiceDateSchema, z.null()]).optional(),
+  });
 
 // ============================================================================
 // Filter & Pagination Schemas

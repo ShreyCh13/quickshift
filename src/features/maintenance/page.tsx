@@ -12,6 +12,14 @@ import Skeleton from "@/components/Skeleton";
 import { useMaintenanceInfinite, useVehicleDropdown, useDeleteMaintenance, useSuppliers, queryKeys } from "@/hooks/useQueries";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
+function formatSupplierInvoiceDateLabel(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 interface MaintenanceItem {
   id: string;
   vehicle_id: string;
@@ -20,6 +28,7 @@ interface MaintenanceItem {
   bill_number: string;
   supplier_name: string;
   supplier_invoice_number: string;
+  supplier_invoice_date: string | null;
   amount: number;
   remarks: string;
   created_by?: string;
@@ -69,9 +78,18 @@ export default function MaintenancePage() {
     bill_number: string;
     supplier_name: string;
     supplier_invoice_number: string;
+    supplier_invoice_date: string;
     amount: number;
     remarks: string;
-  }>({ odometer_km: 0, bill_number: "", supplier_name: "", supplier_invoice_number: "", amount: 0, remarks: "" });
+  }>({
+    odometer_km: 0,
+    bill_number: "",
+    supplier_name: "",
+    supplier_invoice_number: "",
+    supplier_invoice_date: "",
+    amount: 0,
+    remarks: "",
+  });
 
   // Applied filters (what's actually queried)
   const [appliedFilters, setAppliedFilters] = useState<{
@@ -203,6 +221,9 @@ export default function MaintenancePage() {
       bill_number: item.bill_number,
       supplier_name: item.supplier_name,
       supplier_invoice_number: item.supplier_invoice_number || "",
+      supplier_invoice_date: item.supplier_invoice_date
+        ? String(item.supplier_invoice_date).slice(0, 10)
+        : "",
       amount: item.amount,
       remarks: item.remarks,
     });
@@ -214,7 +235,16 @@ export default function MaintenancePage() {
       alert("Bill number, supplier name, and supplier invoice number are required");
       return;
     }
-    await updateMaintenance({ id: itemId, ...editDraft });
+    const invDate = editDraft.supplier_invoice_date.trim();
+    if (invDate && !/^\d{4}-\d{2}-\d{2}$/.test(invDate)) {
+      alert("Supplier invoice date must be YYYY-MM-DD or left empty for legacy records");
+      return;
+    }
+    await updateMaintenance({
+      id: itemId,
+      ...editDraft,
+      supplier_invoice_date: invDate || null,
+    });
     setEditId(null);
     queryClient.invalidateQueries({ queryKey: queryKeys.maintenance.all });
   }
@@ -402,8 +432,16 @@ export default function MaintenancePage() {
                         <div className="mt-0.5 text-sm text-slate-600">
                           {item.supplier_name} · Bill: {item.bill_number}
                         </div>
-                        {item.supplier_invoice_number && (
-                          <div className="mt-0.5 text-xs text-slate-500">Invoice: {item.supplier_invoice_number}</div>
+                        {(item.supplier_invoice_number || item.supplier_invoice_date) && (
+                          <div className="mt-0.5 text-xs text-slate-500">
+                            {item.supplier_invoice_number ? (
+                              <span>Supplier invoice no.: {item.supplier_invoice_number}</span>
+                            ) : null}
+                            {item.supplier_invoice_number && item.supplier_invoice_date ? <span> · </span> : null}
+                            {item.supplier_invoice_date ? (
+                              <span>Supplier invoice date: {formatSupplierInvoiceDateLabel(item.supplier_invoice_date)}</span>
+                            ) : null}
+                          </div>
                         )}
                         {item.users?.display_name && (
                           <div className="mt-0.5 text-xs text-slate-400">By: {item.users.display_name}</div>
@@ -449,12 +487,22 @@ export default function MaintenancePage() {
                             accentColor="emerald"
                           />
                           <div>
-                            <label className="mb-1 block text-xs font-semibold text-slate-600">Supplier Invoice No.</label>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Supplier invoice number</label>
                             <input
                               className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
                               value={editDraft.supplier_invoice_number}
                               onChange={(e) => setEditDraft({ ...editDraft, supplier_invoice_number: e.target.value })}
                             />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold text-slate-600">Supplier invoice date</label>
+                            <input
+                              type="date"
+                              className="w-full rounded-lg border-2 border-slate-200 px-3 py-2.5 text-sm focus:border-emerald-500 focus:outline-none"
+                              value={editDraft.supplier_invoice_date}
+                              onChange={(e) => setEditDraft({ ...editDraft, supplier_invoice_date: e.target.value })}
+                            />
+                            <p className="mt-0.5 text-xs text-slate-400">Optional for older records without a stored date</p>
                           </div>
                           <div>
                             <label className="mb-1 block text-xs font-semibold text-slate-600">Amount (₹)</label>
@@ -493,11 +541,11 @@ export default function MaintenancePage() {
                         <>
                           <div className="mb-3 grid grid-cols-2 gap-2 text-sm">
                             <div>
-                              <div className="text-xs font-semibold text-slate-500">Bill Number</div>
+                              <div className="text-xs font-semibold text-slate-500">Bill number</div>
                               <div className="text-slate-800">{item.bill_number}</div>
                             </div>
                             <div>
-                              <div className="text-xs font-semibold text-slate-500">Supplier Invoice</div>
+                              <div className="text-xs font-semibold text-slate-500">Supplier invoice number</div>
                               <div className="text-slate-800">{item.supplier_invoice_number || "—"}</div>
                             </div>
                             <div>
@@ -505,6 +553,10 @@ export default function MaintenancePage() {
                               <div className="text-slate-800">{item.supplier_name}</div>
                             </div>
                             <div>
+                              <div className="text-xs font-semibold text-slate-500">Supplier invoice date</div>
+                              <div className="text-slate-800">{formatSupplierInvoiceDateLabel(item.supplier_invoice_date)}</div>
+                            </div>
+                            <div className="col-span-2">
                               <div className="text-xs font-semibold text-slate-500">Amount</div>
                               <div className="font-bold text-emerald-700">₹{Number(item.amount).toLocaleString()}</div>
                             </div>

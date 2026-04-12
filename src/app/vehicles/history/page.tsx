@@ -204,6 +204,14 @@ function VehicleHistoryContent() {
       "Odometer (km)": m.odometer_km,
       "Bill Number": m.bill_number,
       "Supplier Name": m.supplier_name,
+      "Supplier invoice number": m.supplier_invoice_number || "-",
+      "Supplier invoice date": m.supplier_invoice_date
+        ? new Date(`${m.supplier_invoice_date}T12:00:00`).toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "-",
       "Amount (₹)": m.amount,
       Remarks: m.remarks || "-",
     }));
@@ -415,6 +423,22 @@ function VehicleHistoryContent() {
                             <div className="text-sm text-slate-600">
                               <span className="font-medium">Supplier:</span>{" "}
                               {(item.data as MaintenanceWithVehicle).supplier_name}
+                            </div>
+                            <div className="text-sm text-slate-600">
+                              <span className="font-medium">Supplier invoice no.:</span>{" "}
+                              {(item.data as MaintenanceWithVehicle).supplier_invoice_number || "—"}
+                            </div>
+                            <div className="text-sm text-slate-600">
+                              <span className="font-medium">Supplier invoice date:</span>{" "}
+                              {(item.data as MaintenanceWithVehicle).supplier_invoice_date
+                                ? new Date(
+                                    `${(item.data as MaintenanceWithVehicle).supplier_invoice_date}T12:00:00`,
+                                  ).toLocaleDateString("en-IN", {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "—"}
                             </div>
                             <div className="mt-1 text-base font-bold text-emerald-700">
                               ₹{(item.data as MaintenanceWithVehicle).amount?.toLocaleString()}
