@@ -57,6 +57,30 @@ export const vehicleSchema = z.object({
   is_active: z.boolean().optional(),
 });
 
+/** Partial vehicle updates (e.g. `{ id, is_active: true }` only). */
+export const vehicleUpdateSchema = z
+  .object({
+    id: z.string().uuid(),
+    vehicle_code: z.string().min(1).max(50).optional(),
+    plate_number: z.string().max(50).optional().nullable(),
+    brand: z.string().min(1).max(100).optional(),
+    model: z.string().min(1).max(100).optional(),
+    year: z.number().int().min(1900).max(new Date().getFullYear() + 1).optional().nullable(),
+    notes: z.string().max(1000).optional().nullable(),
+    is_active: z.boolean().optional(),
+  })
+  .refine(
+    (d) =>
+      d.vehicle_code !== undefined ||
+      d.plate_number !== undefined ||
+      d.brand !== undefined ||
+      d.model !== undefined ||
+      d.year !== undefined ||
+      d.notes !== undefined ||
+      d.is_active !== undefined,
+    { message: "At least one field must be provided to update" },
+  );
+
 // ============================================================================
 // Remark Field Schemas (legacy - kept for admin categories tab)
 // ============================================================================
@@ -239,6 +263,7 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type UserCreateInput = z.infer<typeof userCreateSchema>;
 export type UserUpdateInput = z.infer<typeof userUpdateSchema>;
 export type VehicleInput = z.infer<typeof vehicleSchema>;
+export type VehicleUpdateInput = z.infer<typeof vehicleUpdateSchema>;
 export type RemarkFieldInput = z.infer<typeof remarkFieldSchema>;
 export type ChecklistItemInput = z.infer<typeof checklistItemConfigSchema>;
 export type SupplierCreateInput = z.infer<typeof supplierCreateSchema>;

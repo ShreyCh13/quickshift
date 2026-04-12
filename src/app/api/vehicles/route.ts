@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
-import { vehicleSchema } from "@/lib/validation";
+import { vehicleSchema, vehicleUpdateSchema } from "@/lib/validation";
 import { PAGE_SIZE_DEFAULT } from "@/lib/constants";
 import { getOrSetCache, invalidateCache } from "@/lib/cache";
 import { CACHE_TTL_VEHICLES } from "@/lib/constants";
@@ -165,9 +165,8 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   try {
-    const input = vehicleSchema.parse(await req.json());
-    if (!input.id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
-    
+    const input = vehicleUpdateSchema.parse(await req.json());
+
     const supabase = getSupabaseAdmin();
     
     // Verify vehicle exists to prevent updating non-existent records

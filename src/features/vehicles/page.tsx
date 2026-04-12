@@ -148,8 +148,7 @@ export default function VehiclesPage() {
     invalidateAndRefetch();
   }
 
-  async function handleMarkActive(id: string, code: string) {
-    if (!confirm(`Mark vehicle ${code} active again?`)) return;
+  async function handleMarkActive(id: string) {
     setLocalError(null);
     const res = await updateVehicle({ id, is_active: true });
     if (res.error) {
@@ -452,7 +451,7 @@ export default function VehiclesPage() {
                           Edit
                         </button>
                         <button
-                          onClick={() => handleMarkActive(v.id, v.vehicle_code)}
+                          onClick={() => handleMarkActive(v.id)}
                           className="flex-1 min-w-[60px] rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white active:bg-emerald-700"
                         >
                           Mark active
