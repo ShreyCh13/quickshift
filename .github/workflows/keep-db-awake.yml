@@ -1,0 +1,34 @@
+name: Keep Supabase DB awake
+
+# Pings the Maintainence (State Fleet) Supabase database on a schedule so the
+# free-tier project never hits the 7-day inactivity auto-pause.
+#
+# The request below is a harmless read of a single row. It runs entirely on
+# GitHub's servers, independent of any local machine. The key used is the
+# project's PUBLIC anon key (already shipped to browsers via NEXT_PUBLIC_*),
+# and Row Level Security protects all data, so it is safe to keep here.
+
+on:
+  schedule:
+    - cron: "0 6 */3 * *"   # every 3 days at 06:00 UTC (well inside the 7-day window)
+  workflow_dispatch: {}       # lets you run it manually from the GitHub "Actions" tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST endpoint
+        env:
+          SUPABASE_URL: "https://fsajxysmcbcymaeoijie.supabase.co"
+          SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzYWp4eXNtY2JjeW1hZW9pamllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1NTk1NzYsImV4cCI6MjA4NDEzNTU3Nn0.kh8-ljCLNtHE1VnXl3nbG9z1REB6XcRqyN9fUJnR6Gw"
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/vehicles?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "Supabase keep-alive ping returned HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Unexpected status $code — database may be paused or unreachable"
+            exit 1
+          fi
+          echo "Database is awake."
