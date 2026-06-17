@@ -20,6 +20,8 @@ export default function VehiclesPage() {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const OFFLINE_NOTICE = "Saved locally. Will sync when you're back online.";
   const [showAddForm, setShowAddForm] = useState(false);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -123,12 +125,13 @@ export default function VehiclesPage() {
       notes: newVehicle.notes || null,
     };
     const res = await createVehicle(payload);
-    if (res.error) {
+    if ("error" in res && res.error) {
       setLocalError(res.error);
       return;
     }
     setNewVehicle({ vehicle_code: "", brand: "", model: "", year: "", notes: "" });
     setShowAddForm(false);
+    if ("queued" in res && res.queued) setNotice(OFFLINE_NOTICE);
     invalidateAndRefetch();
   }
 
@@ -141,20 +144,22 @@ export default function VehiclesPage() {
       return;
     setLocalError(null);
     const res = await deleteVehicle(id, true);
-    if (res.error) {
+    if ("error" in res && res.error) {
       setLocalError(res.error);
       return;
     }
+    if ("queued" in res && res.queued) setNotice(OFFLINE_NOTICE);
     invalidateAndRefetch();
   }
 
   async function handleMarkActive(id: string) {
     setLocalError(null);
     const res = await updateVehicle({ id, is_active: true });
-    if (res.error) {
+    if ("error" in res && res.error) {
       setLocalError(res.error);
       return;
     }
+    if ("queued" in res && res.queued) setNotice(OFFLINE_NOTICE);
     invalidateAndRefetch();
   }
 
@@ -198,11 +203,12 @@ export default function VehiclesPage() {
       notes: editForm.notes || null,
     };
     const res = await updateVehicle(payload);
-    if (res.error) {
+    if ("error" in res && res.error) {
       setLocalError(res.error);
       return;
     }
     cancelEdit();
+    if ("queued" in res && res.queued) setNotice(OFFLINE_NOTICE);
     invalidateAndRefetch();
   }
 
@@ -211,6 +217,11 @@ export default function VehiclesPage() {
   return (
     <MobileShell title="Vehicles">
       <div className="space-y-4 p-4 pb-24">
+        {notice && (
+          <button onClick={() => setNotice(null)} className="block w-full text-left">
+            <Toast message={notice} tone="success" />
+          </button>
+        )}
         {displayError && (
           <div className="space-y-2">
             <Toast message={displayError} tone="error" />

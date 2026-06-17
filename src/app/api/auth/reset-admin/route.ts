@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { clearAllRateLimits } from "@/lib/rate-limit";
 import { DEFAULT_USERS } from "@/lib/constants";
+import { hashPassword } from "@/lib/password";
 
 /**
  * Emergency admin password reset endpoint.
@@ -9,7 +10,16 @@ import { DEFAULT_USERS } from "@/lib/constants";
  * Finds admin by role (not username) so it works even if username was changed.
  * Only use when locked out of the system.
  */
-export async function POST() {
+export async function POST(req: Request) {
+  // Gate behind a server-only secret. Without ADMIN_RESET_SECRET configured,
+  // this emergency endpoint is disabled entirely (returns 404). This closes
+  // the previous hole where anyone could reset the admin account.
+  const secret = process.env.ADMIN_RESET_SECRET;
+  const provided = req.headers.get("x-admin-reset-secret");
+  if (!secret || !provided || provided !== secret) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const adminDefault = DEFAULT_USERS.find((u) => u.role === "admin");
   if (!adminDefault) {
     return NextResponse.json({ error: "No default admin found" }, { status: 500 });
@@ -30,12 +40,13 @@ export async function POST() {
     return NextResponse.json({ error: "No admin user found in database" }, { status: 404 });
   }
 
-  // Reset username back to default AND reset password
+  // Reset username back to default AND reset password (stored hashed).
+  const newPassword = process.env.SEED_ADMIN_PASSWORD || adminDefault.password;
   const { error: updateError } = await supabase
     .from("users")
     .update({
       username: adminDefault.username,
-      password: adminDefault.password,
+      password: await hashPassword(newPassword),
       password_changed_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -51,7 +62,7 @@ export async function POST() {
 
   return NextResponse.json({
     success: true,
-    message: `Admin reset successful. Log in with username "${adminDefault.username}" and password "${adminDefault.password}".`,
+    message: `Admin reset successful. Log in with username "${adminDefault.username}" and the configured admin password.`,
     previousUsername: adminUser.username,
   });
 }

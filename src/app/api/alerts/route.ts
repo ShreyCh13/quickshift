@@ -248,7 +248,7 @@ function analyseVehicle(
 // ============================================================
 
 export async function GET(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["dev"])) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import FormField from "@/components/FormField";
 import Toast from "@/components/Toast";
-import { saveSession } from "@/lib/auth";
+import { saveSessionToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,7 +33,11 @@ export default function LoginPage() {
         setError(data.error || "Login failed");
         return;
       }
-      saveSession({ user: data.user, loginAt: Date.now() });
+      if (!data.token) {
+        setError("Login failed");
+        return;
+      }
+      saveSessionToken(data.token);
       router.replace("/vehicles");
     } catch {
       setError("Login failed");

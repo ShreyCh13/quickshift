@@ -7,7 +7,7 @@ import { checkRateLimit, getClientIp, rateLimitPresets, rateLimitHeaders } from 
 import { invalidateCache, cacheKeys } from "@/lib/cache";
 
 export async function POST(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

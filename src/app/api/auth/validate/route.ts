@@ -8,7 +8,7 @@ import { requireSession } from "@/lib/auth";
  * Called on app load to detect stale sessions after password changes.
  */
 export async function GET(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) {
     return NextResponse.json({ valid: false, reason: "session_expired" });
   }

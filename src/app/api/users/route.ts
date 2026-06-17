@@ -7,7 +7,7 @@ import { hashPassword, validatePasswordStrength } from "@/lib/password";
 const PAGE_SIZE_DEFAULT = 50;
 
 export async function GET(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   // Dev users are hidden from admins — only a dev can see other dev accounts
   let query = supabase
     .from("users")
-    .select("id, username, display_name, role, password, created_at", { count: "exact" })
+    .select("id, username, display_name, role, created_at", { count: "exact" })
     .order("created_at", { ascending: false })
     .range(from, to);
   if (!isDev) query = query.neq("role", "dev");
@@ -37,7 +37,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -51,13 +51,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
     }
     
-    // Store plaintext password for internal admin tool (allows admin to view passwords)
+    // Store the password HASHED (never plaintext).
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from("users")
       .insert({
         ...input,
-        password: input.password, // Store plaintext for admin viewing
+        password: await hashPassword(input.password),
       })
       .select("id, username, display_name, role, created_at")
       .single();
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -89,7 +89,7 @@ export async function PUT(req: Request) {
       if (!passwordValidation.valid) {
         return NextResponse.json({ error: passwordValidation.errors.join(", ") }, { status: 400 });
       }
-      updates.password = password; // Store plaintext for admin viewing
+      updates.password = await hashPassword(password); // Store hashed, never plaintext
       updates.password_changed_at = new Date().toISOString(); // Invalidates existing sessions
     }
     
@@ -112,7 +112,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
