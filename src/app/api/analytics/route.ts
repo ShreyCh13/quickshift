@@ -104,7 +104,7 @@ function aggregateVehicleStats(
 // ============================================================================
 
 export async function GET(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const supabase = getSupabaseAdmin();

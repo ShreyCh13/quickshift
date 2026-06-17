@@ -4,7 +4,7 @@ import { requireRole, requireSession } from "@/lib/auth";
 import { supplierCreateSchema, supplierUpdateSchema, idSchema } from "@/lib/validation";
 
 export async function GET(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(req.url);
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Both admin and staff can edit supplier names
 
@@ -91,7 +91,7 @@ export async function PUT(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const session = requireSession(req);
+  const session = await requireSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!requireRole(session, ["admin", "dev"])) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -1,21 +1,24 @@
 import { SESSION_STORAGE_KEY, SESSION_TTL_MS } from "./constants";
 import type { Role, Session } from "./types";
-
-export function parseSessionFromRequest(req: Request): Session | null {
-  const headerSession = req.headers.get("x-sf-session");
-  if (headerSession) {
-    return parseSessionJson(headerSession);
-  }
-  return null;
-}
+import { verifySessionToken } from "./session-token";
 
 export function isSessionValid(session: Session | null): session is Session {
   if (!session?.loginAt || !session.user) return false;
   return Date.now() - session.loginAt <= SESSION_TTL_MS;
 }
 
-export function requireSession(req: Request) {
-  const session = parseSessionFromRequest(req);
+// ============================================================
+// SERVER-SIDE — verify the cryptographically signed token
+// ============================================================
+
+/**
+ * Validate the request's session by VERIFYING the signature on the
+ * `x-sf-session` token. A forged or tampered token fails verification and
+ * yields `null`, so the role inside a verified session can be trusted.
+ */
+export async function requireSession(req: Request): Promise<Session | null> {
+  const token = req.headers.get("x-sf-session");
+  const session = await verifySessionToken(token);
   if (!isSessionValid(session)) return null;
   return session;
 }
@@ -24,9 +27,24 @@ export function requireRole(session: Session, roles: Role[]) {
   return roles.includes(session.user.role);
 }
 
-function parseSessionJson(raw: string): Session | null {
+// ============================================================
+// CLIENT-SIDE — store the opaque token; decode (NOT verify) for UI display.
+// The browser cannot verify the signature (no secret); the server re-verifies
+// on every request, so client-side decoding is for display only.
+// ============================================================
+
+function base64UrlToString(str: string): string {
+  const b64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+  // decodeURIComponent(escape(...)) decodes UTF-8 bytes back into a JS string
+  return decodeURIComponent(escape(atob(b64 + pad)));
+}
+
+export function decodeSessionPayload(token: string): Session | null {
   try {
-    const parsed = JSON.parse(raw) as Session;
+    const [payloadB64] = token.split(".");
+    if (!payloadB64) return null;
+    const parsed = JSON.parse(base64UrlToString(payloadB64)) as Session;
     if (!parsed?.user?.id) return null;
     return parsed;
   } catch {
@@ -34,12 +52,11 @@ function parseSessionJson(raw: string): Session | null {
   }
 }
 
-
 export function loadSession(): Session | null {
   if (typeof window === "undefined") return null;
-  const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
-  if (!raw) return null;
-  const session = parseSessionJson(raw);
+  const token = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!token) return null;
+  const session = decodeSessionPayload(token);
   if (!isSessionValid(session)) {
     window.localStorage.removeItem(SESSION_STORAGE_KEY);
     return null;
@@ -47,9 +64,10 @@ export function loadSession(): Session | null {
   return session;
 }
 
-export function saveSession(session: Session) {
+/** Persist the signed token returned by the login endpoint. */
+export function saveSessionToken(token: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  window.localStorage.setItem(SESSION_STORAGE_KEY, token);
 }
 
 export function clearSession() {
@@ -58,7 +76,8 @@ export function clearSession() {
 }
 
 export function getSessionHeader(): Record<string, string> {
-  const session = loadSession();
-  if (!session) return {};
-  return { "x-sf-session": JSON.stringify(session) };
+  if (typeof window === "undefined") return {};
+  const token = window.localStorage.getItem(SESSION_STORAGE_KEY);
+  if (!token) return {};
+  return { "x-sf-session": token };
 }

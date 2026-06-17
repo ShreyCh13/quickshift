@@ -1,5 +1,12 @@
 name: weekly-backup
 
+# Backs up vehicles, inspections, and maintenance twice a week.
+# Requires two repository secrets (Settings → Secrets and variables → Actions):
+#   BACKUP_URL    = https://<your-production-domain>/api/backup
+#   BACKUP_SECRET = the same value set as BACKUP_SECRET in the Vercel project env
+# If S3 is configured in Vercel, files are uploaded there; otherwise the data is
+# returned inline and saved here as a private "db-backup" artifact.
+
 on:
   schedule:
     - cron: "0 3 * * 1,4"
@@ -10,7 +17,41 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Trigger backup endpoint
+        env:
+          BACKUP_URL: ${{ secrets.BACKUP_URL }}
+          BACKUP_SECRET: ${{ secrets.BACKUP_SECRET }}
         run: |
-          curl -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.BACKUP_SECRET }}" \
-            "${{ secrets.BACKUP_URL }}"
+          if [ -z "$BACKUP_URL" ] || [ -z "$BACKUP_SECRET" ]; then
+            echo "::error::Missing repo secrets. Set BACKUP_URL and BACKUP_SECRET under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          code=$(curl -sS -o resp.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $BACKUP_SECRET" "$BACKUP_URL")
+          echo "Backup endpoint returned HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Backup failed (HTTP $code). Response:"; cat resp.json || true
+            exit 1
+          fi
+          mkdir -p backup-files
+          # If the endpoint returned CSVs inline (no S3), write them to files.
+          node -e '
+            const fs = require("fs");
+            const r = JSON.parse(fs.readFileSync("resp.json", "utf8"));
+            console.log("storage:", r.storage, "| counts:", JSON.stringify(r.counts));
+            if (r.files) {
+              for (const [name, content] of Object.entries(r.files)) {
+                fs.writeFileSync("backup-files/" + name, content);
+              }
+              console.log("Wrote", Object.keys(r.files).length, "backup file(s).");
+            }
+          '
+          echo "Backup completed successfully."
+
+      - name: Archive backup as artifact (when returned inline)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: backup-files/
+          if-no-files-found: ignore
+          retention-days: 90

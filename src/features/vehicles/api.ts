@@ -1,4 +1,5 @@
 import { getSessionHeader } from "@/lib/auth";
+import { fetchWithSession, OFFLINE_QUEUED_ERROR } from "@/lib/api-client";
 
 export async function fetchVehicles(params: {
   search?: string;
@@ -31,30 +32,45 @@ export async function fetchVehicles(params: {
 }
 
 export async function createVehicle(payload: Record<string, unknown>) {
-  const res = await fetch("/api/vehicles", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...getSessionHeader() },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
+  try {
+    return await fetchWithSession<{ vehicle?: unknown; error?: string }>("/api/vehicles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === OFFLINE_QUEUED_ERROR) {
+      return { queued: true } as { queued: true };
+    }
+    throw err;
+  }
 }
 
 export async function updateVehicle(payload: Record<string, unknown>) {
-  const res = await fetch("/api/vehicles", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json", ...getSessionHeader() },
-    body: JSON.stringify(payload),
-  });
-  return res.json();
+  try {
+    return await fetchWithSession<{ vehicle?: unknown; error?: string }>("/api/vehicles", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === OFFLINE_QUEUED_ERROR) {
+      return { queued: true } as { queued: true };
+    }
+    throw err;
+  }
 }
 
 export async function deleteVehicle(id: string, soft = true) {
-  const res = await fetch("/api/vehicles", {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json", ...getSessionHeader() },
-    body: JSON.stringify({ id, soft }),
-  });
-  return res.json();
+  try {
+    return await fetchWithSession<{ error?: string }>("/api/vehicles", {
+      method: "DELETE",
+      body: JSON.stringify({ id, soft }),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.message === OFFLINE_QUEUED_ERROR) {
+      return { queued: true } as { queued: true };
+    }
+    throw err;
+  }
 }
 
 export async function importVehicles(file: File) {

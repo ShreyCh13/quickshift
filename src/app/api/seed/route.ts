@@ -2,27 +2,52 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/db";
 import { requireRole, requireSession } from "@/lib/auth";
 import { DEFAULT_REMARK_FIELDS, DEFAULT_USERS, DEFAULT_VEHICLES } from "@/lib/constants";
+import { hashPassword } from "@/lib/password";
 
 let seeded = false;
 
 export async function POST(req: Request) {
-  const session = requireSession(req);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!requireRole(session, ["admin", "dev"])) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const supabase = getSupabaseAdmin();
 
-  try {
+  // Determine whether this is first-time bootstrap (no users exist yet).
+  const { count: userCount } = await supabase
+    .from("users")
+    .select("*", { count: "exact", head: true });
+  const isBootstrap = !userCount || userCount === 0;
+
+  // Once any user exists, seeding requires an admin/dev session. During the
+  // very first bootstrap (zero users) we allow an unauthenticated call so the
+  // initial admin can be created — but its password comes from a server-only
+  // env var (SEED_ADMIN_PASSWORD), never from anything in the public repo.
+  if (!isBootstrap) {
+    const session = await requireSession(req);
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!requireRole(session, ["admin", "dev"])) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     if (seeded) {
       return NextResponse.json({ seeded: true, cached: true });
     }
+  }
 
-    // Seed users if empty
-    const { count: userCount } = await supabase.from("users").select("*", { count: "exact", head: true });
-    if (!userCount || userCount === 0) {
-      await supabase.from("users").insert(DEFAULT_USERS);
+  try {
+    // Seed users if empty — passwords are HASHED and sourced from env when set.
+    if (isBootstrap) {
+      const adminPassword = process.env.SEED_ADMIN_PASSWORD || "admin123";
+      const staffPassword = process.env.SEED_STAFF_PASSWORD || "mandu123";
+      const passwordByRole: Record<string, string> = {
+        admin: adminPassword,
+        staff: staffPassword,
+      };
+      const usersToInsert = await Promise.all(
+        DEFAULT_USERS.map(async (u) => ({
+          username: u.username,
+          display_name: u.display_name,
+          role: u.role,
+          password: await hashPassword(passwordByRole[u.role] ?? adminPassword),
+        }))
+      );
+      await supabase.from("users").insert(usersToInsert);
     }
 
     // Seed remark fields if empty

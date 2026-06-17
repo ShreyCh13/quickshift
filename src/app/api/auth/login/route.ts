@@ -3,6 +3,7 @@ import { getSupabaseAdmin } from "@/lib/db";
 import { loginSchema } from "@/lib/validation";
 import { checkRateLimit, getClientIp, rateLimitPresets, rateLimitHeaders, blockIp } from "@/lib/rate-limit";
 import { verifyPassword } from "@/lib/password";
+import { signSession } from "@/lib/session-token";
 
 // Track failed attempts for progressive blocking
 const failedAttempts = new Map<string, number>();
@@ -75,16 +76,18 @@ export async function POST(req: Request) {
     // Reset failed attempts on successful login
     failedAttempts.delete(ip);
 
+    const sessionUser = {
+      id: data.id,
+      username: data.username,
+      displayName: data.display_name,
+      role: data.role,
+      createdAt: data.created_at,
+    };
+    // Sign the session server-side so the client cannot tamper with it.
+    const token = await signSession({ user: sessionUser, loginAt: Date.now() });
+
     return NextResponse.json(
-      {
-        user: {
-          id: data.id,
-          username: data.username,
-          displayName: data.display_name,
-          role: data.role,
-          createdAt: data.created_at,
-        },
-      },
+      { user: sessionUser, token },
       { headers: rateLimitHeaders(rateLimit) }
     );
   } catch (err) {

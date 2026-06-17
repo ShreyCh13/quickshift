@@ -13,6 +13,16 @@ function requireBackupSecret(req: Request) {
   return token && token === process.env.BACKUP_SECRET;
 }
 
+/** True only when all S3 credentials are present. */
+function s3Configured(): boolean {
+  return !!(
+    process.env.S3_ENDPOINT &&
+    process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY &&
+    process.env.S3_BUCKET
+  );
+}
+
 function dateKey() {
   const now = new Date();
   const y = now.getUTCFullYear();
@@ -79,33 +89,31 @@ export async function POST(req: Request) {
     }
 
     const date = dateKey();
-    const uploads = await Promise.all([
-      uploadToS3({
-        key: `backups/${date}/vehicles.csv`,
-        body: rowsToCsv(vehicles.data || []),
-        contentType: "text/csv",
-      }),
-      uploadToS3({
-        key: `backups/${date}/inspections.csv`,
-        body: rowsToCsv(inspections.data || []),
-        contentType: "text/csv",
-      }),
-      uploadToS3({
-        key: `backups/${date}/maintenance.csv`,
-        body: rowsToCsv(maintenance.data || []),
-        contentType: "text/csv",
-      }),
-    ]);
+    const files: Record<string, string> = {
+      "vehicles.csv": rowsToCsv(vehicles.data || []),
+      "inspections.csv": rowsToCsv(inspections.data || []),
+      "maintenance.csv": rowsToCsv(maintenance.data || []),
+    };
+    const counts = {
+      vehicles: vehicles.data.length,
+      inspections: inspections.data.length,
+      maintenance: maintenance.data.length,
+    };
 
-    return NextResponse.json({ 
-      success: true, 
-      uploads,
-      counts: {
-        vehicles: vehicles.data.length,
-        inspections: inspections.data.length,
-        maintenance: maintenance.data.length,
-      }
-    });
+    // Preferred: upload to S3 when configured.
+    if (s3Configured()) {
+      const uploads = await Promise.all(
+        Object.entries(files).map(([name, body]) =>
+          uploadToS3({ key: `backups/${date}/${name}`, body, contentType: "text/csv" })
+        )
+      );
+      return NextResponse.json({ success: true, storage: "s3", date, uploads, counts });
+    }
+
+    // Fallback: no S3 configured — return CSVs inline so the caller (the
+    // GitHub Action) can archive them as a private artifact. This keeps
+    // backups working with zero external storage setup.
+    return NextResponse.json({ success: true, storage: "inline", date, counts, files });
   } catch (err) {
     console.error("Failed to upload backups:", err);
     return NextResponse.json({ error: "Failed to upload backups" }, { status: 500 });
