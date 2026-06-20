@@ -184,14 +184,9 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000)
 
-### Default Credentials (after running seed.sql)
+### Default Credentials
 
-```
-Admin: admin / admin123
-Staff: mandu / mandu123
-```
-
-**⚠️ Change these immediately in production!**
+Seed credentials are created on first run. **Change them immediately** and never use the defaults in production.
 
 ---
 
@@ -347,8 +342,8 @@ All API routes require authentication via `x-sf-session` header (managed automat
 ```json
 // Request
 {
-  "username": "admin",
-  "password": "admin123"
+  "username": "your-username",
+  "password": "your-password"
 }
 
 // Response (200)
