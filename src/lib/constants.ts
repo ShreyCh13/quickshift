@@ -63,9 +63,11 @@ export const SESSION_STORAGE_KEY = "sf_session";
 export const SESSION_TTL_DAYS = 30;
 export const SESSION_TTL_MS = SESSION_TTL_DAYS * 24 * 60 * 60 * 1000;
 
+// Passwords are NOT stored here. They are read from the SEED_ADMIN_PASSWORD /
+// SEED_STAFF_PASSWORD environment variables at seed time and stored hashed.
 export const DEFAULT_USERS = [
-  { username: "admin", password: "admin123", display_name: "admin", role: "admin" },
-  { username: "mandu", password: "mandu123", display_name: "mandu", role: "staff" },
+  { username: "admin", display_name: "admin", role: "admin" },
+  { username: "mandu", display_name: "mandu", role: "staff" },
 ] as const;
 
 export const DEFAULT_REMARK_FIELDS = [

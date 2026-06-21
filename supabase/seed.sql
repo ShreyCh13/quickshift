@@ -1,8 +1,6 @@
-insert into public.users (username, password, display_name, role)
-values
-  ('admin', 'admin123', 'Admin', 'admin'),
-  ('mandu', 'mandu123', 'Mandu', 'staff')
-on conflict (username) do nothing;
+-- Default users are NOT seeded here. Create them via POST /api/seed, which reads
+-- SEED_ADMIN_PASSWORD / SEED_STAFF_PASSWORD from the environment and stores the
+-- passwords HASHED. Never put plaintext credentials in this file.
 
 insert into public.remark_fields (key, label, sort_order, is_active)
 values

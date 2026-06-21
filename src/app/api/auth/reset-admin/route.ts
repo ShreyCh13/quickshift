@@ -41,7 +41,13 @@ export async function POST(req: Request) {
   }
 
   // Reset username back to default AND reset password (stored hashed).
-  const newPassword = process.env.SEED_ADMIN_PASSWORD || adminDefault.password;
+  const newPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!newPassword) {
+    return NextResponse.json(
+      { error: "Set SEED_ADMIN_PASSWORD before resetting the admin account." },
+      { status: 400 }
+    );
+  }
   const { error: updateError } = await supabase
     .from("users")
     .update({

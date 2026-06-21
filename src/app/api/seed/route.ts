@@ -33,8 +33,14 @@ export async function POST(req: Request) {
   try {
     // Seed users if empty — passwords are HASHED and sourced from env when set.
     if (isBootstrap) {
-      const adminPassword = process.env.SEED_ADMIN_PASSWORD || "admin123";
-      const staffPassword = process.env.SEED_STAFF_PASSWORD || "mandu123";
+      const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+      const staffPassword = process.env.SEED_STAFF_PASSWORD;
+      if (!adminPassword || !staffPassword) {
+        return NextResponse.json(
+          { error: "Set SEED_ADMIN_PASSWORD and SEED_STAFF_PASSWORD before seeding." },
+          { status: 400 }
+        );
+      }
       const passwordByRole: Record<string, string> = {
         admin: adminPassword,
         staff: staffPassword,
